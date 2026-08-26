@@ -8,9 +8,8 @@ if (typeof firebaseConfig === 'undefined') {
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// Try anonymous sign-in in background
 auth.signInAnonymously().catch(err => {
-  console.log("Anonymous sign-in skipped or not enabled:", err.message);
+  console.log("Anonymous sign-in skipped:", err.message);
 });
 
 // App State
@@ -29,25 +28,47 @@ let selectedProduct = null;
 let currentModalQty = 1;
 let currentTrackingOrderId = null;
 let orderTrackingUnsubscribe = null;
+let currentView = "categories"; // 'categories' or 'items'
+
+// Category icon/color mapping for beautiful cards
+const categoryMeta = {
+  'sıcak': { icon: '☕', gradient: 'linear-gradient(135deg, #1E3A2F 0%, #2D5341 50%, #3a6b56 100%)' },
+  'soğuk': { icon: '🧊', gradient: 'linear-gradient(135deg, #1a4a3a 0%, #2D5341 50%, #4a8b6e 100%)' },
+  'spesiyal': { icon: '🥪', gradient: 'linear-gradient(135deg, #2D5341 0%, #1E3A2F 50%, #3d7a5f 100%)' },
+  'sandviç': { icon: '🥪', gradient: 'linear-gradient(135deg, #2D5341 0%, #1E3A2F 50%, #3d7a5f 100%)' },
+  'atıştırmalık': { icon: '🥐', gradient: 'linear-gradient(135deg, #233d32 0%, #3a6b56 50%, #1E3A2F 100%)' },
+  'tost': { icon: '🥐', gradient: 'linear-gradient(135deg, #233d32 0%, #3a6b56 50%, #1E3A2F 100%)' },
+  'tatlı': { icon: '🍰', gradient: 'linear-gradient(135deg, #3a2e1e 0%, #5a4530 50%, #2D5341 100%)' },
+  'pasta': { icon: '🍰', gradient: 'linear-gradient(135deg, #3a2e1e 0%, #5a4530 50%, #2D5341 100%)' },
+  'default': { icon: '🍽️', gradient: 'linear-gradient(135deg, #1E3A2F 0%, #2D5341 100%)' }
+};
+
+function getCategoryMeta(catName) {
+  const lower = catName.toLowerCase();
+  for (const [key, val] of Object.entries(categoryMeta)) {
+    if (key !== 'default' && lower.includes(key)) return val;
+  }
+  return categoryMeta['default'];
+}
 
 // DOM Elements
 const securityBlockViewEl = document.getElementById("securityBlockView");
 const menuViewEl = document.getElementById("menuView");
 const restNameEl = document.getElementById("restName");
-const restLogoEl = document.getElementById("restLogo");
 const tableBadgeEl = document.getElementById("tableBadge");
 const tableLabelTextEl = document.getElementById("tableLabelText");
+const categoryLandingEl = document.getElementById("categoryLanding");
+const btnBackToCategoriesEl = document.getElementById("btnBackToCategories");
 const categoryNavEl = document.getElementById("categoryNav");
+const menuSectionEl = document.getElementById("menuSection");
 const menuItemsContainerEl = document.getElementById("menuItemsContainer");
 const loadingIndicatorEl = document.getElementById("loadingIndicator");
 const searchInputEl = document.getElementById("searchInput");
 
-// Cart Elements
 const cartFloatingBarEl = document.getElementById("cartFloatingBar");
 const cartBarCountEl = document.getElementById("cartBarCount");
 const cartBarTotalEl = document.getElementById("cartBarTotal");
 
-// Modals
 const productModalOverlay = document.getElementById("productModalOverlay");
 const btnCloseProductModal = document.getElementById("btnCloseProductModal");
 const modalProductImg = document.getElementById("modalProductImg");
@@ -62,7 +83,6 @@ const modalProductNote = document.getElementById("modalProductNote");
 const btnConfirmAddToCart = document.getElementById("btnConfirmAddToCart");
 const modalBtnTotal = document.getElementById("modalBtnTotal");
 
-// Cart Modal
 const cartModalOverlay = document.getElementById("cartModalOverlay");
 const btnCloseCartModal = document.getElementById("btnCloseCartModal");
 const cartModalItems = document.getElementById("cartModalItems");
@@ -71,7 +91,6 @@ const cartModalTable = document.getElementById("cartModalTable");
 const cartOrderNote = document.getElementById("cartOrderNote");
 const btnSubmitOrder = document.getElementById("btnSubmitOrder");
 
-// Tracking View Elements
 const trackingViewEl = document.getElementById("trackingView");
 const trackTableTextEl = document.getElementById("trackTableText");
 const trackOrderNoEl = document.getElementById("trackOrderNo");
@@ -84,12 +103,44 @@ const stepPreparing = document.getElementById("stepPreparing");
 const stepReady = document.getElementById("stepReady");
 const stepDelivered = document.getElementById("stepDelivered");
 
-// Helper: Format Currency (₺)
 function formatCurrency(amount) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 }
 
-// 1. Parse URL Parameters & Security Key
+// ========== VIEW MANAGEMENT ==========
+function showCategoryLanding() {
+  currentView = "categories";
+  categoryLandingEl.style.display = "grid";
+  menuSectionEl.style.display = "none";
+  categoryNavEl.style.display = "none";
+  btnBackToCategoriesEl.style.display = "none";
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showMenuItems(categoryId) {
+  currentView = "items";
+  activeCategory = categoryId || "all";
+  categoryLandingEl.style.display = "none";
+  menuSectionEl.style.display = "block";
+  categoryNavEl.style.display = "flex";
+  btnBackToCategoriesEl.style.display = "flex";
+  
+  // Update active tab
+  document.querySelectorAll(".category-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.category === activeCategory);
+  });
+  
+  renderMenuItems();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+btnBackToCategoriesEl.addEventListener("click", () => {
+  searchInputEl.value = "";
+  searchQuery = "";
+  showCategoryLanding();
+});
+
+// ========== URL PARAMS & SECURITY ==========
 function initUrlParams() {
   const params = new URLSearchParams(window.location.search);
   
@@ -106,15 +157,12 @@ function initUrlParams() {
     currentTableLabel = `Masa (${currentTableId})`;
   }
 
-  // Check QR Security Key from URL or Session Storage
   const urlKey = params.get("key") || params.get("k") || params.get("token") || params.get("sig");
   const sessionKey = sessionStorage.getItem("sadec_qr_auth_" + currentTableId);
 
   if (urlKey) {
     clientSecurityKey = urlKey;
     sessionStorage.setItem("sadec_qr_auth_" + currentTableId, urlKey);
-
-    // Clean address bar so the secret key cannot be copied or shared via URL
     try {
       const cleanUrl = window.location.pathname + `?restId=${currentRestId}&table=${currentTableId}`;
       window.history.replaceState({}, document.title, cleanUrl);
@@ -125,11 +173,9 @@ function initUrlParams() {
 
   tableLabelTextEl.textContent = currentTableLabel;
   cartModalTable.textContent = currentTableLabel;
-
   validateSecurity();
 }
 
-// 2. Validate Security with Firestore Table Key
 function validateSecurity() {
   db.collection("restaurants").doc(currentRestId).collection("tables").doc(currentTableId)
     .onSnapshot(doc => {
@@ -140,35 +186,30 @@ function validateSecurity() {
           tableLabelTextEl.textContent = tableData.label;
           cartModalTable.textContent = tableData.label;
         }
-
-        // Check if QR key is configured
         if (tableData.qrKey && tableData.qrKey.trim() !== "") {
           if (clientSecurityKey === tableData.qrKey) {
             isQrAuthorized = true;
-            showMenuView();
+            showMenuViewMain();
           } else {
             isQrAuthorized = false;
             showSecurityLock();
           }
         } else {
-          // If no security key is set yet on the table, permit access
           isQrAuthorized = true;
-          showMenuView();
+          showMenuViewMain();
         }
       } else {
-        // Table not found in DB
         if (clientSecurityKey) {
           isQrAuthorized = true;
-          showMenuView();
+          showMenuViewMain();
         } else {
           isQrAuthorized = false;
           showSecurityLock();
         }
       }
     }, err => {
-      console.log("Masa güvenlik kontrolü hatası:", err.message);
-      // Fallback
-      showMenuView();
+      console.log("Security check error:", err.message);
+      showMenuViewMain();
     });
 }
 
@@ -178,12 +219,12 @@ function showSecurityLock() {
   if (cartFloatingBarEl) cartFloatingBarEl.style.display = "none";
 }
 
-function showMenuView() {
+function showMenuViewMain() {
   if (securityBlockViewEl) securityBlockViewEl.style.display = "none";
   if (menuViewEl) menuViewEl.style.display = "block";
 }
 
-// 3. Fetch Restaurant Details & Listen Realtime
+// ========== RESTAURANT DATA ==========
 function listenRestaurantData() {
   db.collection("restaurants").doc(currentRestId).onSnapshot(doc => {
     if (doc.exists) {
@@ -193,10 +234,10 @@ function listenRestaurantData() {
         document.title = `${data.name} - QR Menü`;
       }
     }
-  }, err => console.log("Restoran bilgisi dinleme:", err.message));
+  }, err => console.log("Restaurant listen:", err.message));
 }
 
-// 4. Listen Categories Realtime
+// ========== CATEGORIES ==========
 function listenCategories() {
   db.collection("restaurants").doc(currentRestId).collection("categories")
     .orderBy("sortOrder", "asc")
@@ -211,13 +252,13 @@ function listenCategories() {
       );
 
       if (categories.length === 0 || hasOldDummy) {
-        // Eski demo ürünleri sil ve sadece Sade C Gerze menüsünü yükle
         await seedSampleData();
       } else {
-        renderCategories();
+        renderCategoryLanding();
+        renderCategoryTabs();
       }
     }, err => {
-      console.log("Kategori dinleme hatası:", err.message);
+      console.log("Category listen error:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("categories")
         .onSnapshot(async snap => {
           categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -227,13 +268,43 @@ function listenCategories() {
           if (categories.length === 0 || hasOldDummy) {
             await seedSampleData();
           } else {
-            renderCategories();
+            renderCategoryLanding();
+            renderCategoryTabs();
           }
         });
     });
 }
 
-function renderCategories() {
+function renderCategoryLanding() {
+  if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
+  
+  let html = '';
+  categories.forEach((cat, index) => {
+    const meta = getCategoryMeta(cat.name);
+    const itemCount = menuItems.filter(i => i.categoryId === cat.id && i.isAvailable !== false).length;
+    
+    html += `
+      <div class="category-card" data-category-id="${cat.id}" style="background: ${meta.gradient}; animation-delay: ${index * 0.08}s;">
+        <div class="category-card-icon">${meta.icon}</div>
+        <div class="category-card-overlay">
+          <div class="category-card-name">${cat.name}</div>
+          ${itemCount > 0 ? `<div class="category-card-count">${itemCount} ürün</div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+  
+  categoryLandingEl.innerHTML = html;
+  
+  document.querySelectorAll(".category-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const catId = card.dataset.categoryId;
+      showMenuItems(catId);
+    });
+  });
+}
+
+function renderCategoryTabs() {
   categoryNavEl.innerHTML = `<button class="category-btn ${activeCategory === 'all' ? 'active' : ''}" data-category="all">Tümü</button>`;
   
   categories.forEach(cat => {
@@ -250,7 +321,6 @@ function renderCategories() {
     categoryNavEl.appendChild(btn);
   });
 
-  // Attach click to 'all'
   categoryNavEl.querySelector('[data-category="all"]').addEventListener("click", (e) => {
     activeCategory = "all";
     document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
@@ -259,7 +329,7 @@ function renderCategories() {
   });
 }
 
-// 5. Listen Menu Items Realtime
+// ========== MENU ITEMS ==========
 function listenMenuItems() {
   db.collection("restaurants").doc(currentRestId).collection("menuItems")
     .orderBy("sortOrder", "asc")
@@ -268,15 +338,24 @@ function listenMenuItems() {
       snapshot.forEach(doc => {
         menuItems.push({ id: doc.id, ...doc.data() });
       });
-      loadingIndicatorEl.style.display = "none";
-      renderMenuItems();
+      if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
+      
+      if (currentView === "categories") {
+        renderCategoryLanding();
+      } else {
+        renderMenuItems();
+      }
     }, err => {
-      console.log("Menü dinleme hatası, indexsiz deneniyor:", err.message);
+      console.log("Menu listen error, trying without index:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("menuItems")
         .onSnapshot(snap => {
           menuItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          loadingIndicatorEl.style.display = "none";
-          renderMenuItems();
+          if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
+          if (currentView === "categories") {
+            renderCategoryLanding();
+          } else {
+            renderMenuItems();
+          }
         });
     });
 }
@@ -306,7 +385,6 @@ function renderMenuItems() {
     return;
   }
 
-  // Group by category if "all" is active
   if (activeCategory === "all" && searchQuery.trim() === "") {
     let html = "";
     categories.forEach(cat => {
@@ -332,7 +410,6 @@ function renderMenuItems() {
     menuItemsContainerEl.innerHTML = filtered.map(item => createProductCardHtml(item)).join("");
   }
 
-  // Attach card click handlers
   document.querySelectorAll(".product-card").forEach(card => {
     card.addEventListener("click", () => {
       const itemId = card.dataset.id;
@@ -368,13 +445,18 @@ function createProductCardHtml(item) {
   `;
 }
 
-// Search Filter
+// ========== SEARCH ==========
 searchInputEl.addEventListener("input", (e) => {
   searchQuery = e.target.value;
-  renderMenuItems();
+  if (searchQuery.trim() !== "") {
+    activeCategory = "all";
+    showMenuItems("all");
+  } else if (currentView === "items" && searchQuery.trim() === "") {
+    renderMenuItems();
+  }
 });
 
-// 6. Product Detail / Add to Cart Modal
+// ========== PRODUCT MODAL ==========
 function openProductModal(product) {
   selectedProduct = product;
   currentModalQty = 1;
@@ -446,7 +528,7 @@ btnConfirmAddToCart.addEventListener("click", () => {
   updateCartUI();
 });
 
-// 7. Cart UI & Management
+// ========== CART ==========
 function updateCartUI() {
   const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
@@ -459,7 +541,6 @@ function updateCartUI() {
     cartFloatingBarEl.style.display = "none";
   }
 
-  // Render Cart Modal Items
   if (cart.length === 0) {
     cartModalItems.innerHTML = `<p style="text-align: center; color: #64748b; padding: 20px;">Sepetiniz boş.</p>`;
     btnSubmitOrder.disabled = true;
@@ -506,7 +587,7 @@ cartModalOverlay.addEventListener("click", (e) => {
   if (e.target === cartModalOverlay) cartModalOverlay.classList.remove("active");
 });
 
-// 8. Submit Order to Firestore
+// ========== SUBMIT ORDER ==========
 btnSubmitOrder.addEventListener("click", async () => {
   if (cart.length === 0 || !isQrAuthorized) return;
 
@@ -549,9 +630,8 @@ btnSubmitOrder.addEventListener("click", async () => {
     updateCartUI();
     cartModalOverlay.classList.remove("active");
     startOrderTracking(docRef.id, orderData);
-
   } catch (error) {
-    console.error("Sipariş hatası:", error);
+    console.error("Order error:", error);
     alert("Sipariş iletilirken bir hata oluştu: " + error.message);
   } finally {
     btnSubmitOrder.disabled = false;
@@ -559,7 +639,7 @@ btnSubmitOrder.addEventListener("click", async () => {
   }
 });
 
-// 9. Live Order Tracking
+// ========== ORDER TRACKING ==========
 function startOrderTracking(orderId, initialData) {
   currentTrackingOrderId = orderId;
   menuViewEl.style.display = "none";
@@ -579,7 +659,6 @@ function startOrderTracking(orderId, initialData) {
     </div>
   `).join("");
 
-  // Listen live status updates
   if (orderTrackingUnsubscribe) orderTrackingUnsubscribe();
 
   orderTrackingUnsubscribe = db.collection("restaurants")
@@ -595,7 +674,6 @@ function startOrderTracking(orderId, initialData) {
 }
 
 function updateTrackingUI(status) {
-  // Reset all steps
   [stepPending, stepPreparing, stepReady, stepDelivered].forEach(s => s.classList.remove("active"));
 
   if (status === "pending") {
@@ -629,14 +707,14 @@ function updateTrackingUI(status) {
 btnNewOrderEl.addEventListener("click", () => {
   trackingViewEl.style.display = "none";
   menuViewEl.style.display = "block";
+  showCategoryLanding();
 });
 
-// 10. Seed Sade.C Kahve Gerze Full Menu Dataset
+// ========== SEED SAMPLE DATA ==========
 async function seedSampleData() {
   try {
     const restRef = db.collection("restaurants").doc(currentRestId);
 
-    // Eski demo ürün ve kategorileri tamamen sil
     const oldItemsSnap = await restRef.collection("menuItems").get();
     await Promise.all(oldItemsSnap.docs.map(d => d.ref.delete()));
 
@@ -652,16 +730,13 @@ async function seedSampleData() {
       logoUrl: "logo.png"
     }, { merge: true });
 
-    // 1. Categories
     const catHot = await restRef.collection("categories").add({ name: "Sıcak Kahveler & İçecekler", sortOrder: 1 });
     const catCold = await restRef.collection("categories").add({ name: "Soğuk İçecekler & Kahveler", sortOrder: 2 });
     const catSpecials = await restRef.collection("categories").add({ name: "Spesiyeller & Sandviçler", sortOrder: 3 });
     const catSnack = await restRef.collection("categories").add({ name: "Atıştırmalıklar & Tostlar", sortOrder: 4 });
     const catDessert = await restRef.collection("categories").add({ name: "Tatlılar & Pastalar", sortOrder: 5 });
 
-    // 2. Menu Items
     const items = [
-      // Sıcaklar
       { categoryId: catHot.id, name: "Espresso", description: "30ml klasik yoğun İtalyan espresso", price: 100, imageUrl: "images/hot_coffee.jpg", allergens: ["Kafein"], sortOrder: 1 },
       { categoryId: catHot.id, name: "Double Espresso", description: "60ml çift shot yoğun lezzet", price: 120, imageUrl: "images/hot_coffee.jpg", allergens: ["Kafein"], sortOrder: 2 },
       { categoryId: catHot.id, name: "Double Shot Americano", description: "150ml sıcak su ve 60ml espresso", price: 140, imageUrl: "images/hot_coffee.jpg", allergens: ["Kafein"], sortOrder: 3 },
@@ -683,8 +758,6 @@ async function seedSampleData() {
       { categoryId: catHot.id, name: "Sıcak Çikolata", description: "180ml sıcak süt ve eritilmiş gerçek çikolata", price: 180, imageUrl: "images/hot_coffee.jpg", allergens: ["Süt"], sortOrder: 19 },
       { categoryId: catHot.id, name: "Beyaz Sıcak Çikolata", description: "180ml sıcak süt ve beyaz çikolata", price: 180, imageUrl: "images/hot_coffee.jpg", allergens: ["Süt"], sortOrder: 20 },
       { categoryId: catHot.id, name: "Pembe Ruby Sıcak Çikolata", description: "180ml sıcak süt ve ruby çikolata lezzeti", price: 180, imageUrl: "images/hot_coffee.jpg", allergens: ["Süt"], sortOrder: 21 },
-
-      // Soğuklar
       { categoryId: catCold.id, name: "Ice Americano", description: "150ml soğuk su, 60ml espresso ve buz", price: 150, imageUrl: "images/cold_drinks.jpg", allergens: ["Kafein"], sortOrder: 1 },
       { categoryId: catCold.id, name: "Ice Latte", description: "130ml soğuk süt, 30ml espresso ve buz", price: 180, imageUrl: "images/cold_drinks.jpg", allergens: ["Süt", "Kafein"], sortOrder: 2 },
       { categoryId: catCold.id, name: "Ice White Chocolate Mocha", description: "30ml espresso, 20gr beyaz çikolata, soğuk süt, krema ve buz", price: 200, imageUrl: "images/cold_drinks.jpg", allergens: ["Süt", "Kafein"], sortOrder: 3 },
@@ -704,12 +777,8 @@ async function seedSampleData() {
       { categoryId: catCold.id, name: "Fanta", description: "330ml Kutu", price: 80, imageUrl: "images/cold_drinks.jpg", allergens: [], sortOrder: 17 },
       { categoryId: catCold.id, name: "Sprite", description: "330ml Kutu", price: 80, imageUrl: "images/cold_drinks.jpg", allergens: [], sortOrder: 18 },
       { categoryId: catCold.id, name: "Bardak Su", description: "Doğal kaynak suyu", price: 30, imageUrl: "images/cold_drinks.jpg", allergens: [], sortOrder: 19 },
-
-      // Spesiyeller
       { categoryId: catSpecials.id, name: "Köfte Sandviç", description: "Ciabatta ekmeği, dana köfte, eritilmiş mozzarella, karamelize soğan, közlenmiş kapya biber, özel soslar", price: 260, imageUrl: "images/promo_sandwich.jpg", allergens: ["Gluten", "Süt"], sortOrder: 1 },
       { categoryId: catSpecials.id, name: "Tavuk Sandviç", description: "Ciabatta ekmeği, özel marine ızgara tavuk, Akdeniz yeşillikleri, özel dükkan sosları", price: 260, imageUrl: "images/promo_sandwich.jpg", allergens: ["Gluten"], sortOrder: 2 },
-
-      // Atıştırmalıklar & Tostlar
       { categoryId: catSnack.id, name: "Üç Peynirli Bazlama Tost", description: "Mozzarella, kolot ve eski kaşar peynirli fırın bazlama", price: 175, imageUrl: "images/snacks.jpg", allergens: ["Gluten", "Süt"], sortOrder: 1 },
       { categoryId: catSnack.id, name: "Sucuklu Kaşarlı Bazlama Tost", description: "Kavrulmuş dana sucuk ve bol kaşar peyniri", price: 175, imageUrl: "images/snacks.jpg", allergens: ["Gluten", "Süt"], sortOrder: 2 },
       { categoryId: catSnack.id, name: "Mücver (Dip Soslu)", description: "Kabak, havuç, soğan, dereotu, maydanoz, özel baharatlar ve yoğurtlu dip sos", price: 150, imageUrl: "images/snacks.jpg", allergens: ["Gluten", "Yumurta", "Süt"], sortOrder: 3 },
@@ -718,8 +787,6 @@ async function seedSampleData() {
       { categoryId: catSnack.id, name: "Patatesli Börek", description: "Ev yapımı yufka, baharatlı patates", price: 60, imageUrl: "images/snacks.jpg", allergens: ["Gluten"], sortOrder: 6 },
       { categoryId: catSnack.id, name: "Dereotlu Poğaça", description: "Dereotu, maydanoz, havuç ve peynir (110gr)", price: 50, imageUrl: "images/snacks.jpg", allergens: ["Gluten", "Süt", "Yumurta"], sortOrder: 7 },
       { categoryId: catSnack.id, name: "Yumurtalı Peynirli Ekmek", description: "Ezine peyniri, yumurta, maydanoz, dağ kekiği (25dk fırınlanır)", price: 80, imageUrl: "images/snacks.jpg", allergens: ["Gluten", "Süt", "Yumurta"], sortOrder: 8 },
-
-      // Tatlılar
       { categoryId: catDessert.id, name: "San Sebastian Cheesecake", description: "Akışkan sıcak Belçika çikolata sosu ile fırından taptaze", price: 220, imageUrl: "images/promo_cheesecake.jpg", allergens: ["Süt", "Yumurta"], sortOrder: 1 },
       { categoryId: catDessert.id, name: "Amerikan Creamy Nemli Kek", description: "Bol kakaolu yumuşak kek ve özel kakaolu kreması ile", price: 180, imageUrl: "images/desserts.jpg", allergens: ["Gluten", "Süt", "Yumurta"], sortOrder: 2 },
       { categoryId: catDessert.id, name: "Tres Leches (Trileçe)", description: "Mascarpone ve krema ile örtülmüş süt reçelli geleneksel kek", price: 200, imageUrl: "images/desserts.jpg", allergens: ["Gluten", "Süt", "Yumurta"], sortOrder: 3 },
@@ -737,7 +804,6 @@ async function seedSampleData() {
       await restRef.collection("menuItems").add(it);
     }
 
-    // 3. Masalar (BAR, İÇ 1-2, DIŞ 1-4, Y1, Y2)
     const tablesList = [
       { id: "table-bar", label: "BAR" },
       { id: "table-ic-1", label: "İÇ 1" },
@@ -762,13 +828,13 @@ async function seedSampleData() {
       });
     }
 
-    console.log("Sade.C Menüsü ve Masaları Başarıyla Yüklendi!");
+    console.log("Sade.C Menu seeded successfully!");
   } catch (err) {
-    console.error("Menü yükleme hatası:", err);
+    console.error("Seed error:", err);
   }
 }
 
-// Start Application
+// ========== START ==========
 window.addEventListener("DOMContentLoaded", () => {
   initUrlParams();
   listenRestaurantData();
