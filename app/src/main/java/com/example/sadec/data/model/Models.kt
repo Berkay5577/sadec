@@ -54,21 +54,31 @@ data class Order(
     val tableId: String = "",
     val tableLabel: String = "",
     val customerName: String = "", // Müşterinin girdiği isim
-    val status: String = "pending", // pending, delivered, cancelled
+    val status: String = "pending", // pending, preparing, ready, delivered, cancelled
     val items: List<OrderItem> = emptyList(),
     val totalPrice: Double = 0.0,
     val note: String = "",
     val cancelReason: String = "", // İptal gerekçesi
+    @get:PropertyName("isArchived") @set:PropertyName("isArchived")
+    var isArchived: Boolean = false, // Haftalık sıfırlama/arşivleme için
+    val weekPeriod: String = "",     // Örn: "2026-W35"
     @ServerTimestamp val createdAt: Date? = null,
     @ServerTimestamp val updatedAt: Date? = null
-)
+) {
+    fun isFullyPaid(): Boolean = items.isNotEmpty() && items.all { it.isPaid }
+    fun remainingAmount(): Double = items.filter { !it.isPaid }.sumOf { it.unitPrice * it.quantity }
+    fun paidAmount(): Double = items.filter { it.isPaid }.sumOf { it.unitPrice * it.quantity }
+}
 
 data class OrderItem(
     val menuItemId: String = "",
     val name: String = "",
     val quantity: Int = 1,
     val unitPrice: Double = 0.0,
-    val note: String = ""
+    val note: String = "",
+    @get:PropertyName("isPaid") @set:PropertyName("isPaid")
+    var isPaid: Boolean = false,
+    val paidAt: Long? = null
 )
 
 data class Staff(

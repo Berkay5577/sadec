@@ -1,5 +1,7 @@
 package com.example.sadec.ui.screens
 
+import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -26,6 +29,7 @@ import com.example.sadec.data.model.Order
 import com.example.sadec.data.model.OrderItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
+import com.example.sadec.util.WeeklyReportPdfGenerator
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -34,6 +38,12 @@ import java.util.Locale
 data class ProductSaleStat(
     val name: String,
     val totalQuantity: Int,
+    val totalRevenue: Double
+)
+
+data class TableSaleStat(
+    val label: String,
+    val orderCount: Int,
     val totalRevenue: Double
 )
 
@@ -46,15 +56,30 @@ fun DashboardScreen(
     val orders by viewModel.orders.collectAsState()
     val menuItems by viewModel.menuItems.collectAsState()
     val tables by viewModel.tables.collectAsState()
+    val restaurant by viewModel.restaurant.collectAsState()
+    val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("📊 Satış Raporu", "➕ Elle Satış Girişi", "📜 Geçmiş Satışlar")
+    val tabs = listOf("📊 Satış Analizi", "🏢 Masa Analizi", "📜 Satış Geçmişi", "➕ Kasa Girişi")
 
-    // Date Filter for Reports (0: Tüm Zamanlar, 1: Bugün, 2: Bu Hafta)
+    // Weekly Period Label (e.g. 2026-W35)
+    val cal = Calendar.getInstance()
+    val currentWeekYear = cal.get(Calendar.YEAR)
+    val currentWeekNum = cal.get(Calendar.WEEK_OF_YEAR)
+    val currentWeekPeriod = "$currentWeekYear-Hafta$currentWeekNum"
+
+    // Active unarchived completed orders for this week
+    val activeWeeklyOrders = remember(orders) {
+        orders.filter { !it.isArchived && it.status != "cancelled" && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }
+    }
+
+    // Weekly Close & Mandatory Download State
+    var showWeeklyResetDialog by remember { mutableStateOf(false) }
+    var hasDownloadedPdf by remember { mutableStateOf(false) }
+
+    // Date Filter for Reports (0: Bu Hafta (Aktif Kasa), 1: Bugün, 2: Tüm Zamanlar / Arşiv Dahil)
     var dateFilterIndex by remember { mutableStateOf(0) }
 
-    // Filter orders based on date selection
-    val calendar = Calendar.getInstance()
     val todayStart = Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -62,40 +87,46 @@ fun DashboardScreen(
         set(Calendar.MILLISECOND, 0)
     }.time
 
-    val weekStart = Calendar.getInstance().apply {
-        add(Calendar.DAY_OF_YEAR, -7)
-    }.time
-
-    val filteredOrders = remember(orders, dateFilterIndex) {
-        orders.filter { order ->
-            if (order.status == "cancelled") return@filter false
-            val createdAt = order.createdAt ?: return@filter true
-            when (dateFilterIndex) {
-                1 -> createdAt.after(todayStart)
-                2 -> createdAt.after(weekStart)
-                else -> true
+    val displayedOrders = remember(orders, dateFilterIndex) {
+        when (dateFilterIndex) {
+            0 -> orders.filter { !it.isArchived && it.status != "cancelled" }
+            1 -> orders.filter { order ->
+                if (order.status == "cancelled") false
+                else (order.createdAt?.after(todayStart) ?: true)
             }
+            else -> orders.filter { it.status != "cancelled" }
         }
     }
 
-    // Calculations for Report
-    val totalTurnover = remember(filteredOrders) {
-        filteredOrders.sumOf { it.totalPrice }
+    // Completed / Paid orders in the active filter
+    val completedOrders = remember(displayedOrders) {
+        displayedOrders.filter { it.status == "delivered" || it.items.any { item -> item.isPaid } }
     }
 
-    val totalItemCount = remember(filteredOrders) {
-        filteredOrders.sumOf { order -> order.items.sumOf { it.quantity } }
+    // Total Revenue calculation
+    val totalRevenue = remember(completedOrders) {
+        completedOrders.sumOf { order ->
+            val paidItems = order.items.filter { it.isPaid }
+            if (paidItems.isNotEmpty()) paidItems.sumOf { it.unitPrice * it.quantity }
+            else order.totalPrice
+        }
     }
 
-    // Product breakdown stats
-    val productStats = remember(filteredOrders) {
+    val totalItemsSold = remember(completedOrders) {
+        completedOrders.sumOf { order ->
+            order.items.sumOf { it.quantity }
+        }
+    }
+
+    // Product Sales Stats
+    val productStats = remember(completedOrders) {
         val map = mutableMapOf<String, Pair<Int, Double>>()
-        filteredOrders.forEach { order ->
+        completedOrders.forEach { order ->
             order.items.forEach { item ->
-                val current = map[item.name] ?: Pair(0, 0.0)
+                val prev = map.getOrDefault(item.name, Pair(0, 0.0))
                 map[item.name] = Pair(
-                    current.first + item.quantity,
-                    current.second + (item.unitPrice * item.quantity)
+                    prev.first + item.quantity,
+                    prev.second + (item.unitPrice * item.quantity)
                 )
             }
         }
@@ -104,14 +135,57 @@ fun DashboardScreen(
         }.sortedByDescending { it.totalQuantity }
     }
 
+    // Table Sales Stats
+    val tableStats = remember(completedOrders) {
+        val map = mutableMapOf<String, Pair<Int, Double>>()
+        completedOrders.forEach { order ->
+            val label = order.tableLabel.ifBlank { "Diğer" }
+            val prev = map.getOrDefault(label, Pair(0, 0.0))
+            val orderTotal = if (order.items.any { it.isPaid }) order.items.filter { it.isPaid }.sumOf { it.unitPrice * it.quantity } else order.totalPrice
+            map[label] = Pair(
+                prev.first + 1,
+                prev.second + orderTotal
+            )
+        }
+        map.map { (label, pair) ->
+            TableSaleStat(label = label, orderCount = pair.first, totalRevenue = pair.second)
+        }.sortedByDescending { it.totalRevenue }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 windowInsets = TopAppBarDefaults.windowInsets,
-                title = { Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = {
+                    Column {
+                        Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            text = "Haftalık Ciro: ₺${"%.2f".format(totalRevenue)}",
+                            fontSize = 12.sp,
+                            color = WarmGold
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = Color.White)
+                    }
+                },
+                actions = {
+                    // Weekly Close & Mandatory PDF Download Action
+                    Button(
+                        onClick = {
+                            hasDownloadedPdf = false
+                            showWeeklyResetDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = ForestGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Haftayı Kapat 📅", color = ForestGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -128,11 +202,34 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Tab Selector
-            TabRow(
+            // Filter Chips Bar (Dönem Seçimi)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("📅 Bu Hafta (Aktif Kasa)", "☀️ Bugün", "🗄️ Tüm Geçmiş").forEachIndexed { idx, title ->
+                    FilterChip(
+                        selected = dateFilterIndex == idx,
+                        onClick = { dateFilterIndex = idx },
+                        label = { Text(title, fontSize = 12.sp, fontWeight = if (dateFilterIndex == idx) FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = ForestGreen,
+                            selectedLabelColor = WarmGold
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
+            }
+
+            // Tabs
+            ScrollableTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = ForestGreen
+                contentColor = ForestGreen,
+                edgePadding = 16.dp,
+                divider = {}
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -149,144 +246,265 @@ fun DashboardScreen(
                 }
             }
 
+            HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
+
             when (selectedTab) {
-                0 -> SalesReportTab(
-                    totalTurnover = totalTurnover,
-                    totalOrderCount = filteredOrders.size,
-                    totalItemCount = totalItemCount,
+                0 -> SalesAnalyticsTab(
+                    totalRevenue = totalRevenue,
+                    orderCount = completedOrders.size,
+                    totalItemsSold = totalItemsSold,
                     productStats = productStats,
-                    dateFilterIndex = dateFilterIndex,
-                    onDateFilterChange = { dateFilterIndex = it }
-                )
-                1 -> ManualSaleEntryTab(
-                    menuItems = menuItems,
-                    onConfirmSale = { items, tableLabel, customerName, note ->
-                        viewModel.addManualSale(items, tableLabel, customerName, note)
-                        selectedTab = 0 // Go to report tab
+                    onExportPdf = {
+                        WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
+                            context = context,
+                            orders = completedOrders,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            weekPeriod = currentWeekPeriod
+                        )
                     }
                 )
-                2 -> SalesHistoryTab(orders = orders)
+                1 -> TableAnalyticsTab(
+                    tableStats = tableStats,
+                    totalRevenue = totalRevenue
+                )
+                2 -> SalesHistoryTab(
+                    completedOrders = completedOrders
+                )
+                3 -> ManualOrderEntryTab(
+                    menuItems = menuItems,
+                    tables = tables,
+                    viewModel = viewModel
+                )
             }
         }
+    }
+
+    // Mandatory Weekly Reset & PDF Download Dialog
+    if (showWeeklyResetDialog) {
+        AlertDialog(
+            onDismissRequest = { /* Zorunlu / dismiss edilemez veya kapat butonuyla kapatılır */ },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = WarmGold, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Haftalık Kasa Kapatma", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = ForestGreen)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Bu haftanın kasasını sıfırlayıp yeni haftaya başlamak üzeresiniz.",
+                        fontWeight = FontWeight.SemiBold,
+                        color = ForestGreen
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "⚠️ Veri kaybını önlemek ve muhasebe kayıtlarınızı korumak için, haftalık detaylı gelir raporunu PDF olarak indirmeniz ZORUNLUDUR.",
+                        fontSize = 12.sp,
+                        color = Color(0xFFB45309),
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Surface(
+                        color = SoftMintGreen,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Dönem: $currentWeekPeriod", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                            Text("Kapatılacak Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
+                            Text("Tamamlanan Adisyon: ${completedOrders.size} Adet", fontSize = 12.sp, color = SageGreen)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Step 1: Download PDF Button
+                    Button(
+                        onClick = {
+                            val file = WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
+                                context = context,
+                                orders = activeWeeklyOrders,
+                                restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
+                                weekPeriod = currentWeekPeriod,
+                                onSuccess = {
+                                    hasDownloadedPdf = true
+                                }
+                            )
+                            if (file != null) hasDownloadedPdf = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (hasDownloadedPdf) SageGreen else ForestGreen)
+                    ) {
+                        Icon(
+                            imageVector = if (hasDownloadedPdf) Icons.Default.CheckCircle else Icons.Default.Download,
+                            contentDescription = null,
+                            tint = WarmGold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (hasDownloadedPdf) "1. Adım: PDF İndirildi ✅" else "1. Adım: Raporu İndir (PDF) 📥",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Step 2: Reset Week Button (Disabled until Step 1 complete)
+                    Button(
+                        onClick = {
+                            viewModel.archiveWeeklyOrders(currentWeekPeriod) {
+                                showWeeklyResetDialog = false
+                                hasDownloadedPdf = false
+                            }
+                        },
+                        enabled = hasDownloadedPdf,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = WarmGold,
+                            disabledContainerColor = Slate500.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = if (hasDownloadedPdf) ForestGreen else Slate500)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "2. Adım: Kasayı Sıfırla & Yeni Haftaya Başla",
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasDownloadedPdf) ForestGreen else Slate500
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showWeeklyResetDialog = false }) {
+                    Text("Vazgeç & Kapat", color = Slate500)
+                }
+            }
+        )
     }
 }
 
 // -------------------------------------------------------------
-// TAB 1: SATIŞ RAPORLARI & ÜRÜN ADET BAZLI ANALİZ
+// TAB 1: SALES & PRODUCT ANALYTICS
 // -------------------------------------------------------------
 @Composable
-fun SalesReportTab(
-    totalTurnover: Double,
-    totalOrderCount: Int,
-    totalItemCount: Int,
+fun SalesAnalyticsTab(
+    totalRevenue: Double,
+    orderCount: Int,
+    totalItemsSold: Int,
     productStats: List<ProductSaleStat>,
-    dateFilterIndex: Int,
-    onDateFilterChange: (Int) -> Unit
+    onExportPdf: () -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Date Filter Pills
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val filters = listOf("Tüm Zamanlar", "Bugün", "Son 7 Gün")
-                filters.forEachIndexed { index, label ->
-                    val selected = dateFilterIndex == index
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onDateFilterChange(index) },
-                        label = { Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ForestGreen,
-                            selectedLabelColor = WarmGold
-                        )
-                    )
-                }
-            }
-        }
-
-        // Summary Metric Cards
+        // KPI Summary Cards
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Card(
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = ForestGreen)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Toplam Ciro", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
-                        Text(
-                            text = "₺${"%.2f".format(totalTurnover)}",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = WarmGold
-                        )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("TOPLAM CİRO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("₺${"%.2f".format(totalRevenue)}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = WarmGold)
                     }
                 }
 
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Satılan Ürün", fontSize = 12.sp, color = SageGreen)
-                        Text(
-                            text = "$totalItemCount Adet",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ForestGreen
-                        )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("ADİSYON", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Slate500)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("$orderCount Adet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
                     }
                 }
 
                 Card(
-                    modifier = Modifier.weight(0.9f),
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Sipariş", fontSize = 12.sp, color = Slate500)
-                        Text(
-                            text = "$totalOrderCount",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ForestGreen
-                        )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("SATILAN ÜRÜN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Slate500)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("$totalItemsSold Adet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SageGreen)
                     }
                 }
             }
         }
 
-        // Product Sales Breakdown Header
+        // Export PDF Quick Bar
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("📄 Detaylı Rapor Dökümü", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 13.sp)
+                        Text("Tüm sipariş ve masa detaylarını içeren resmi PDF çıktısı alın.", fontSize = 11.sp, color = SageGreen)
+                    }
+                    Button(
+                        onClick = onExportPdf,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PDF İndir", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Section Title: En Çok Satan Ürünler
         item {
             Text(
-                text = "📦 Ürün Bazlı Satış Miktarları & Gelir",
-                style = MaterialTheme.typography.titleMedium,
+                text = "ÜRÜN BAZLI SATIŞ ADETLERİ & CİRO",
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = ForestGreen,
-                modifier = Modifier.padding(top = 8.dp)
+                letterSpacing = 1.sp,
+                color = Slate500
             )
         }
 
         if (productStats.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Text("Bu zaman aralığında henüz satış kaydı bulunmuyor.", color = Slate500)
+                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Bu dönemde henüz tamamlanmış ürün satışı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    }
                 }
             }
         } else {
@@ -304,33 +522,33 @@ fun SalesReportTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stat.name,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = ForestGreen
-                            )
-                            Text(
-                                text = "Toplam Ciro: ₺${"%.2f".format(stat.totalRevenue)}",
-                                fontSize = 12.sp,
-                                color = Slate500
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(ForestGreen, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${stat.totalQuantity}",
+                                    color = WarmGold,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(stat.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ForestGreen)
+                                Text("${stat.totalQuantity} porsiyon satıldı", fontSize = 11.sp, color = Slate500)
+                            }
                         }
 
-                        // Quantity Badge (e.g. x14 Adet)
-                        Surface(
-                            color = SoftMintGreen,
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = "x${stat.totalQuantity} Adet",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = ForestGreen,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
+                        Text(
+                            text = "₺${"%.2f".format(stat.totalRevenue)}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFFB45309)
+                        )
                     }
                 }
             }
@@ -339,337 +557,49 @@ fun SalesReportTab(
 }
 
 // -------------------------------------------------------------
-// TAB 2: ELLE SATIŞ GİRİŞİ (KASA / POS SATIŞI)
+// TAB 2: TABLE ANALYTICS
 // -------------------------------------------------------------
 @Composable
-fun ManualSaleEntryTab(
-    menuItems: List<MenuItem>,
-    onConfirmSale: (items: List<OrderItem>, tableLabel: String, customerName: String, note: String) -> Unit
+fun TableAnalyticsTab(
+    tableStats: List<TableSaleStat>,
+    totalRevenue: Double
 ) {
-    // Current selected items in manual cart
-    val manualCart = remember { mutableStateMapOf<String, Int>() } // menuItemId -> quantity
-    var customItemName by remember { mutableStateOf("") }
-    var customItemPrice by remember { mutableStateOf("") }
-    var customItemQty by remember { mutableStateOf("1") }
-    val extraCustomItems = remember { mutableStateListOf<OrderItem>() }
-
-    var selectedTable by remember { mutableStateOf("KASA / ELDEN") }
-    var customerName by remember { mutableStateOf("") }
-    var saleNote by remember { mutableStateOf("") }
-    var searchQuery by remember { mutableStateOf("") }
-
-    val tableOptions = listOf("KASA / ELDEN", "BAR", "İÇ 1", "İÇ 2", "DIŞ 1", "DIŞ 2", "DIŞ 3", "DIŞ 4", "Y1", "Y2")
-
-    // Filter menu items by search
-    val filteredMenuItems = remember(menuItems, searchQuery) {
-        if (searchQuery.isBlank()) menuItems else menuItems.filter { it.name.contains(searchQuery, ignoreCase = true) }
-    }
-
-    // Calculate total price
-    val standardTotal = manualCart.entries.sumOf { (itemId, qty) ->
-        val item = menuItems.find { it.id == itemId }
-        (item?.price ?: 0.0) * qty
-    }
-    val customTotal = extraCustomItems.sumOf { it.unitPrice * it.quantity }
-    val grandTotal = standardTotal + customTotal
-
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Table & Customer Name Row
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("Masa & Müşteri Seçimi", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Table selector pills
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val commonTables = listOf("KASA / ELDEN", "BAR", "İÇ 1", "DIŞ 1")
-                        commonTables.forEach { tbl ->
-                            FilterChip(
-                                selected = selectedTable == tbl,
-                                onClick = { selectedTable = tbl },
-                                label = { Text(tbl, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = ForestGreen,
-                                    selectedLabelColor = WarmGold
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = customerName,
-                        onValueChange = { customerName = it },
-                        label = { Text("Müşteri Adı (İsteğe bağlı)") },
-                        placeholder = { Text("Örn: Ahmet Bey") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-
-        // Search in Sade.C Menu
-        item {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Menüden Ürün Ara & Ekle") },
-                placeholder = { Text("Espresso, San Sebastian, Poğaça...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = ForestGreen) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = "MASA BAZLI TOPLAM GELİR DAĞILIMI",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = Slate500
             )
         }
 
-        // Standard Menu Items with Quick Steppers
-        items(filteredMenuItems.take(15)) { item ->
-            val count = manualCart[item.id] ?: 0
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(item.name, fontWeight = FontWeight.Bold, color = ForestGreen)
-                        Text("₺${"%.2f".format(item.price)}", color = WarmGold, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    }
-
-                    // Stepper Controls (- / count / +)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (count > 0) {
-                            IconButton(
-                                onClick = {
-                                    if (count == 1) manualCart.remove(item.id) else manualCart[item.id] = count - 1
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Default.Remove, contentDescription = "Azalt", tint = ForestGreen)
-                            }
-
-                            Text(
-                                text = "$count",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                color = ForestGreen
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { manualCart[item.id] = count + 1 },
-                            modifier = Modifier
-                                .size(34.dp)
-                                .background(ForestGreen, CircleShape)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Ekle", tint = WarmGold, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        // Custom Item Entry Section
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("➕ Menü Dışı Özel Ürün Ekle", fontWeight = FontWeight.Bold, color = ForestGreen)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = customItemName,
-                            onValueChange = { customItemName = it },
-                            label = { Text("Ürün Adı") },
-                            modifier = Modifier.weight(2f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = customItemPrice,
-                            onValueChange = { customItemPrice = it },
-                            label = { Text("Fiyat (₺)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1.2f),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = {
-                            val price = customItemPrice.toDoubleOrNull() ?: 0.0
-                            val qty = customItemQty.toIntOrNull() ?: 1
-                            if (customItemName.isNotBlank() && price > 0) {
-                                extraCustomItems.add(
-                                    OrderItem(name = customItemName.trim(), quantity = qty, unitPrice = price)
-                                )
-                                customItemName = ""
-                                customItemPrice = ""
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SageGreen)
-                    ) {
-                        Text("Listeye Ekle", color = Color.White)
-                    }
-                }
-            }
-        }
-
-        // Display Custom Items Added
-        if (extraCustomItems.isNotEmpty()) {
-            items(extraCustomItems) { customItem ->
+        if (tableStats.isEmpty()) {
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${customItem.quantity}x ${customItem.name} (₺${"%.2f".format(customItem.unitPrice)})", fontWeight = FontWeight.Bold, color = ForestGreen)
-                        IconButton(onClick = { extraCustomItems.remove(customItem) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error)
-                        }
+                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Henüz masa satış verisi bulunmuyor.", color = Slate500, fontSize = 13.sp)
                     }
                 }
             }
-        }
-
-        // Order Note
-        item {
-            OutlinedTextField(
-                value = saleNote,
-                onValueChange = { saleNote = it },
-                label = { Text("Satış / Kasa Notu (İsteğe bağlı)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
-        }
-
-        // Grand Total & Submit Sale Button
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = ForestGreen)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Toplam Tutar:", color = Color.White, fontSize = 16.sp)
-                        Text(
-                            text = "₺${"%.2f".format(grandTotal)}",
-                            color = WarmGold,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Button(
-                        onClick = {
-                            val items = mutableListOf<OrderItem>()
-                            manualCart.forEach { (itemId, qty) ->
-                                val item = menuItems.find { it.id == itemId }
-                                if (item != null && qty > 0) {
-                                    items.add(OrderItem(menuItemId = item.id, name = item.name, quantity = qty, unitPrice = item.price))
-                                }
-                            }
-                            items.addAll(extraCustomItems)
-
-                            if (items.isNotEmpty()) {
-                                onConfirmSale(items, selectedTable, customerName, saleNote)
-                            }
-                        },
-                        enabled = grandTotal > 0,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold)
-                    ) {
-                        Text("Kasadan Satışı Tamamla 💸", color = ForestGreen, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// TAB 3: GEÇMİŞ SATIŞLAR (SİPARİŞ ARŞİVİ)
-// -------------------------------------------------------------
-@Composable
-fun SalesHistoryTab(orders: List<Order>) {
-    val timeFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-    val completedOrders = remember(orders) {
-        orders.filter { it.status == "delivered" }
-    }
-
-    if (completedOrders.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(64.dp), tint = Slate500)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Henüz tamamlanmış geçmiş satış bulunmuyor.", color = Slate500, fontWeight = FontWeight.Medium)
-            }
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(completedOrders) { order ->
-                val formattedTime = order.createdAt?.let { timeFormat.format(it) } ?: ""
+        } else {
+            items(tableStats) { stat ->
+                val percentage = if (totalRevenue > 0) ((stat.totalRevenue / totalRevenue) * 100).toInt() else 0
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
@@ -683,34 +613,134 @@ fun SalesHistoryTab(orders: List<Order>) {
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = order.tableLabel.ifBlank { "Kasa" },
+                                        text = "📍 ${stat.label}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = ForestGreen,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
-                                if (order.customerName.isNotBlank()) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("👤 ${order.customerName}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = ForestGreen)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("${stat.orderCount} Sipariş", fontSize = 12.sp, color = Slate500)
+                            }
+
+                            Text(
+                                text = "₺${"%.2f".format(stat.totalRevenue)}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = WarmGold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Progress Bar representing percentage of total
+                        LinearProgressIndicator(
+                            progress = { if (totalRevenue > 0) (stat.totalRevenue / totalRevenue).toFloat() else 0f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = ForestGreen,
+                            trackColor = ForestGreen.copy(alpha = 0.1f)
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Toplam cironun %$percentage'si bu masadan elde edildi.",
+                            fontSize = 10.sp,
+                            color = Slate500
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// TAB 3: CHRONOLOGICAL SALES HISTORY
+// -------------------------------------------------------------
+@Composable
+fun SalesHistoryTab(
+    completedOrders: List<Order>
+) {
+    val sdfDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr"))
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Text(
+                text = "TAMAMLANAN TÜM ADİSYONLAR (${completedOrders.size})",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = Slate500
+            )
+        }
+
+        if (completedOrders.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Tamamlanmış satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    }
+                }
+            }
+        } else {
+            items(completedOrders) { order ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = SoftMintGreen,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = order.tableLabel.ifBlank { "Masa" },
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = ForestGreen,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "👤 ${order.customerName.ifBlank { "Misafir" }}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = ForestGreen
+                                )
                             }
 
                             Text(
                                 text = "₺${"%.2f".format(order.totalPrice)}",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 color = WarmGold
                             )
                         }
 
-                        if (formattedTime.isNotBlank()) {
-                            Text(text = formattedTime, fontSize = 11.sp, color = Slate500, modifier = Modifier.padding(top = 4.dp))
-                        }
+                        val dateStr = order.createdAt?.let { sdfDate.format(it) } ?: ""
+                        Text(text = "🕒 $dateStr", fontSize = 11.sp, color = Slate500, modifier = Modifier.padding(top = 2.dp))
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ForestGreen.copy(alpha = 0.08f))
 
-                        // Order Items List
+                        // Items list
                         order.items.forEach { item ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -718,24 +748,183 @@ fun SalesHistoryTab(orders: List<Order>) {
                             ) {
                                 Text(
                                     text = "${item.quantity}x ${item.name}",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     color = ForestGreen
                                 )
                                 Text(
                                     text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     color = Slate500
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
 
-                        if (order.note.isNotBlank()) {
-                            Text(
-                                text = "Not: ${order.note}",
-                                fontSize = 11.sp,
-                                color = SageGreen,
-                                modifier = Modifier.padding(top = 4.dp)
+// -------------------------------------------------------------
+// TAB 4: MANUAL ORDER ENTRY (KASA SATIŞI)
+// -------------------------------------------------------------
+@Composable
+fun ManualOrderEntryTab(
+    menuItems: List<MenuItem>,
+    tables: List<com.example.sadec.data.model.TableItem>,
+    viewModel: MainViewModel
+) {
+    var selectedTableId by remember { mutableStateOf(tables.firstOrNull()?.id ?: "") }
+    var selectedTableLabel by remember { mutableStateOf(tables.firstOrNull()?.label ?: "KASA") }
+    var customerNameInput by remember { mutableStateOf("") }
+    val cart = remember { mutableStateListOf<OrderItem>() }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Manuel Kasa Satış Girişi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
+                    Text("Garson veya kasiyer elden nakit/kart satışı doğrudan sisteme işleyebilir.", fontSize = 12.sp, color = Slate500)
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = customerNameInput,
+                        onValueChange = { customerNameInput = it },
+                        label = { Text("Müşteri Adı (İsteğe Bağlı)") },
+                        placeholder = { Text("Örn: Ahmet Bey") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Masa Seçin:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        tables.take(4).forEach { table ->
+                            FilterChip(
+                                selected = selectedTableId == table.id,
+                                onClick = {
+                                    selectedTableId = table.id
+                                    selectedTableLabel = table.label
+                                },
+                                label = { Text(table.label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ForestGreen, selectedLabelColor = WarmGold)
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text("MENÜDEN ÜRÜN SEÇİN", fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = Slate500)
+        }
+
+        items(menuItems) { item ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(item.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ForestGreen)
+                        Text("₺${"%.2f".format(item.price)}", fontSize = 13.sp, color = WarmGold, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            val existing = cart.indexOfFirst { it.menuItemId == item.id }
+                            if (existing > -1) {
+                                val cur = cart[existing]
+                                cart[existing] = cur.copy(quantity = cur.quantity + 1)
+                            } else {
+                                cart.add(OrderItem(menuItemId = item.id, name = item.name, quantity = 1, unitPrice = item.price, isPaid = true))
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("+ Ekle", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (cart.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Seçilen Ürünler (Sepet)", fontWeight = FontWeight.Bold, color = ForestGreen)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        cart.forEach { cItem ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${cItem.quantity}x ${cItem.name}", fontSize = 13.sp, color = ForestGreen)
+                                Text("₺${"%.2f".format(cItem.unitPrice * cItem.quantity)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                            }
+                        }
+
+                        val totalCart = cart.sumOf { it.unitPrice * it.quantity }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ForestGreen.copy(alpha = 0.2f))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Toplam:", fontWeight = FontWeight.Bold, color = ForestGreen)
+                            Text("₺${"%.2f".format(totalCart)}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = WarmGold)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                // Save as completed paid order
+                                val newOrder = Order(
+                                    tableId = selectedTableId.ifBlank { "table-kasa" },
+                                    tableLabel = selectedTableLabel.ifBlank { "KASA" },
+                                    customerName = customerNameInput.ifBlank { "Elden Müşteri" },
+                                    status = "delivered",
+                                    items = cart.map { it.copy(isPaid = true, paidAt = System.currentTimeMillis()) },
+                                    totalPrice = totalCart
+                                )
+                                viewModel.createManualOrder(newOrder)
+                                cart.clear()
+                                customerNameInput = ""
+                            },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                        ) {
+                            Text("Satışı Tamamla & Kasaya İşle 💳", color = WarmGold, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

@@ -128,6 +128,88 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun updateOrderItemPayment(
+        restaurantId: String,
+        orderId: String,
+        itemIndex: Int,
+        isPaid: Boolean
+    ): Result<Unit> {
+        return try {
+            val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
+                val updatedItems = order.items.toMutableList()
+                if (itemIndex in updatedItems.indices) {
+                    val targetItem = updatedItems[itemIndex]
+                    updatedItems[itemIndex] = targetItem.copy(
+                        isPaid = isPaid,
+                        paidAt = if (isPaid) System.currentTimeMillis() else null
+                    )
+                    val isAllPaid = updatedItems.isNotEmpty() && updatedItems.all { it.isPaid }
+                    val newStatus = if (isAllPaid) "delivered" else order.status
+                    transaction.update(
+                        docRef,
+                        mapOf(
+                            "items" to updatedItems,
+                            "status" to newStatus,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun payFullOrder(restaurantId: String, orderId: String): Result<Unit> {
+        return try {
+            val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
+                val updatedItems = order.items.map {
+                    it.copy(isPaid = true, paidAt = it.paidAt ?: System.currentTimeMillis())
+                }
+                transaction.update(
+                    docRef,
+                    mapOf(
+                        "items" to updatedItems,
+                        "status" to "delivered",
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun archiveOrders(restaurantId: String, orderIds: List<String>, weekPeriod: String): Result<Unit> {
+        return try {
+            val batch = db.batch()
+            val ordersCol = db.collection("restaurants").document(restaurantId).collection("orders")
+            orderIds.forEach { orderId ->
+                val ref = ordersCol.document(orderId)
+                batch.update(
+                    ref,
+                    mapOf(
+                        "isArchived" to true,
+                        "weekPeriod" to weekPeriod,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // -------------------------------------------------------------
     // CATEGORIES (Real-time Flow)
     // -------------------------------------------------------------

@@ -95,12 +95,29 @@ fun MainScreen(
                         label = { Text("Menü", fontWeight = if (currentScreen is Screen.Menu) FontWeight.Bold else FontWeight.Normal) }
                     )
 
+                    val tables by viewModel.tables.collectAsState()
+                    val activeTablesCount = tables.count { table ->
+                        orders.any { ord -> ord.tableId == table.id && !ord.isArchived && ord.status != "cancelled" && (!ord.isFullyPaid() || ord.status == "pending" || ord.status == "preparing" || ord.status == "ready") }
+                    }
+
                     NavigationBarItem(
                         selected = currentScreen is Screen.Tables,
                         onClick = { currentScreen = Screen.Tables },
                         colors = navItemColors,
-                        icon = { Icon(Icons.Default.QrCode2, contentDescription = "Masalar") },
-                        label = { Text("Masalar", fontWeight = if (currentScreen is Screen.Tables) FontWeight.Bold else FontWeight.Normal) }
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (activeTablesCount > 0) {
+                                        Badge(containerColor = WarmGold) {
+                                            Text("$activeTablesCount", color = ForestGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.QrCode2, contentDescription = "Masalar")
+                            }
+                        },
+                        label = { Text(if (activeTablesCount > 0) "Aktif Masalar ($activeTablesCount)" else "Masalar", fontWeight = if (currentScreen is Screen.Tables) FontWeight.Bold else FontWeight.Normal) }
                     )
 
                     NavigationBarItem(

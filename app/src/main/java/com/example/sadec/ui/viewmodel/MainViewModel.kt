@@ -217,6 +217,57 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun payOrderItem(orderId: String, itemIndex: Int) {
+        viewModelScope.launch {
+            val res = firestoreRepository.updateOrderItemPayment(_restaurantId.value, orderId, itemIndex, true)
+            res.onSuccess {
+                _uiMessage.emit("Ürün ödemesi alındı! 💳✅")
+            }.onFailure {
+                _uiMessage.emit("Ödeme işlenemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun payFullOrder(orderId: String) {
+        viewModelScope.launch {
+            val res = firestoreRepository.payFullOrder(_restaurantId.value, orderId)
+            res.onSuccess {
+                _uiMessage.emit("Masa hesabı tamamen kapatıldı ve tahsil edildi! 💳✨")
+            }.onFailure {
+                _uiMessage.emit("Hesap kapatılamadı: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun archiveWeeklyOrders(weekPeriod: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val unarchivedOrders = _orders.value.filter { !it.isArchived }.map { it.id }
+            if (unarchivedOrders.isEmpty()) {
+                _uiMessage.emit("Arşivlenecek sipariş bulunmuyor.")
+                onComplete()
+                return@launch
+            }
+            val res = firestoreRepository.archiveOrders(_restaurantId.value, unarchivedOrders, weekPeriod)
+            res.onSuccess {
+                _uiMessage.emit("Haftalık kasa başarıyla sıfırlandı ve arşivlendi! 📊✅")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Hafta sıfırlama hatası: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun createManualOrder(order: Order) {
+        viewModelScope.launch {
+            val res = firestoreRepository.createOrder(_restaurantId.value, order)
+            res.onSuccess {
+                _uiMessage.emit("Manuel satış kaydedildi ve kasaya işlendi! 💳✅")
+            }.onFailure {
+                _uiMessage.emit("Satış kaydedilemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
     // --- CATEGORY ACTIONS ---
     fun saveCategory(
         name: String,

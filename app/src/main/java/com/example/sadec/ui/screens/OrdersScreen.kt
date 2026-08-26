@@ -33,16 +33,17 @@ fun OrdersScreen(
     val restaurant by viewModel.restaurant.collectAsState()
 
     // Varsayılan görünüm: Sadece aktif (teslim edilmemiş ve iptal edilmemiş) siparişleri gösterir
-    val filteredOrders = remember(orders, filter) {
+    val unarchivedOrders = remember(orders) { orders.filter { !it.isArchived } }
+    val filteredOrders = remember(unarchivedOrders, filter) {
         when (filter) {
-            "all" -> orders.filter { it.status != "delivered" && it.status != "cancelled" }
-            "delivered" -> orders.filter { it.status == "delivered" }
-            "cancelled" -> orders.filter { it.status == "cancelled" }
-            else -> orders.filter { it.status == filter }
+            "all" -> unarchivedOrders.filter { it.status != "delivered" && it.status != "cancelled" }
+            "delivered" -> unarchivedOrders.filter { it.status == "delivered" }
+            "cancelled" -> unarchivedOrders.filter { it.status == "cancelled" }
+            else -> unarchivedOrders.filter { it.status == filter }
         }
     }
 
-    val activeCount = orders.count { it.status != "delivered" && it.status != "cancelled" }
+    val activeCount = unarchivedOrders.count { it.status != "delivered" && it.status != "cancelled" }
     var orderToCancel by remember { mutableStateOf<Order?>(null) }
 
     Scaffold(
@@ -142,7 +143,7 @@ fun OrdersScreen(
                             order = order,
                             onClick = { onOrderClick(order) },
                             onDeliver = {
-                                viewModel.updateOrderStatus(order.id, "delivered")
+                                viewModel.payFullOrder(order.id)
                             },
                             onCancel = {
                                 orderToCancel = order
