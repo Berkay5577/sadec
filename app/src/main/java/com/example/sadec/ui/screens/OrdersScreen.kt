@@ -214,6 +214,15 @@ fun OrderCard(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
+                    if (order.customerName.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "👤 ${order.customerName}",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = ForestGreen
+                        )
+                    }
                     if (formattedTime.isNotBlank()) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -296,36 +305,23 @@ fun OrderCard(
 
                 // Quick Status Action Button
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    when (order.status) {
-                        "pending" -> {
-                            Button(
-                                onClick = { onStatusChange("preparing") },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = InfoBlue),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Text("👨‍🍳 Hazırla", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
+                    if (order.status != "delivered" && order.status != "cancelled") {
+                        Button(
+                            onClick = { onStatusChange("delivered") },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text("✅ Teslim Et", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
                         }
-                        "preparing" -> {
-                            Button(
-                                onClick = { onStatusChange("ready") },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Text("🍽️ Hazır", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        "ready" -> {
-                            Button(
-                                onClick = { onStatusChange("delivered") },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Slate700),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Text("✅ Teslim Et", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
+
+                        OutlinedButton(
+                            onClick = { onStatusChange("cancelled") },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("❌ İptal", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

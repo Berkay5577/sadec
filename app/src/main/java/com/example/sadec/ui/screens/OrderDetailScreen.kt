@@ -66,6 +66,14 @@ fun OrderDetailScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = OrangeDark
                             )
+                            if (order.customerName.isNotBlank()) {
+                                Text(
+                                    text = "Müşteri: ${order.customerName}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = ForestGreen
+                                )
+                            }
                             if (formattedTime.isNotBlank()) {
                                 Text(
                                     text = formattedTime,
@@ -78,55 +86,49 @@ fun OrderDetailScreen(
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Sipariş Durumunu Değiştir:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Slate700)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Sipariş İşlemleri:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Status Change Buttons
+                    // Sadece Teslim Edildi ve İptal Et Butonları
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        StatusButton(
-                            label = "Bekliyor",
-                            isActive = order.status == "pending",
-                            color = WarningYellow,
-                            modifier = Modifier.weight(1f)
-                        ) { viewModel.updateOrderStatus(order.id, "pending") }
+                        Button(
+                            onClick = { viewModel.updateOrderStatus(order.id, "delivered") },
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (order.status == "delivered") ForestGreen else SuccessGreen
+                            )
+                        ) {
+                            Text(
+                                text = if (order.status == "delivered") "✓ Teslim Edildi" else "Teslim Edildi ✅",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                        }
 
-                        StatusButton(
-                            label = "Hazırlanıyor",
-                            isActive = order.status == "preparing",
-                            color = InfoBlue,
-                            modifier = Modifier.weight(1f)
-                        ) { viewModel.updateOrderStatus(order.id, "preparing") }
-
-                        StatusButton(
-                            label = "Hazır",
-                            isActive = order.status == "ready",
-                            color = SuccessGreen,
-                            modifier = Modifier.weight(1f)
-                        ) { viewModel.updateOrderStatus(order.id, "ready") }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        StatusButton(
-                            label = "Teslim Edildi",
-                            isActive = order.status == "delivered",
-                            color = Slate700,
-                            modifier = Modifier.weight(1f)
-                        ) { viewModel.updateOrderStatus(order.id, "delivered") }
-
-                        StatusButton(
-                            label = "İptal Et",
-                            isActive = order.status == "cancelled",
-                            color = DangerRed,
-                            modifier = Modifier.weight(1f)
-                        ) { viewModel.updateOrderStatus(order.id, "cancelled") }
+                        Button(
+                            onClick = { viewModel.updateOrderStatus(order.id, "cancelled") },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (order.status == "cancelled") DangerRed else Color(0xFFFEE2E2)
+                            )
+                        ) {
+                            Text(
+                                text = "İptal Et ❌",
+                                fontWeight = FontWeight.Bold,
+                                color = if (order.status == "cancelled") Color.White else DangerRed,
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }
