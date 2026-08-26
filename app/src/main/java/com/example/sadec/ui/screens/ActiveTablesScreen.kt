@@ -53,7 +53,7 @@ fun ActiveTablesScreen(
                 windowInsets = TopAppBarDefaults.windowInsets,
                 title = {
                     Column {
-                        Text("Açık Masalar", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Masalar", fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
                             text = if (activeTables.isNotEmpty()) "${activeTables.size} Masada Açık Hesap • Kalan: ₺${"%.2f".format(totalRemainingAmount)}" else "Şu an açık masa yok",
                             fontSize = 12.sp,

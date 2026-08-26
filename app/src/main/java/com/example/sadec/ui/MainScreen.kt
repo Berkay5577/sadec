@@ -115,7 +115,7 @@ fun MainScreen(
                                 Icon(Icons.Default.TableBar, contentDescription = "Açık Masalar")
                             }
                         },
-                        label = { Text("Açık Masalar", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.ActiveTables) FontWeight.Bold else FontWeight.Normal) }
+                        label = { Text("Masalar", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.ActiveTables) FontWeight.Bold else FontWeight.Normal) }
                     )
 
                     // 3. Menü (Kategoriler & Ürünler)
