@@ -38,10 +38,14 @@ class FirestoreRepository {
             newRest
         }
 
-        // Otomatik Menü Kontrolü: Kategoriler boşsa tüm Sade C Gerze menüsünü anında yükle
+        // Otomatik Menü Kontrolü: Kategoriler boşsa veya eski demo (Pizza/Burger) varsa temizle ve Sade C Gerze menüsünü yükle
         try {
-            val catSnap = docRef.collection("categories").limit(1).get().await()
-            if (catSnap.isEmpty) {
+            val catSnap = docRef.collection("categories").get().await()
+            val hasOldDemo = catSnap.documents.any { doc ->
+                val name = doc.getString("name") ?: ""
+                name.contains("Pizza", ignoreCase = true) || name.contains("Burger", ignoreCase = true)
+            }
+            if (catSnap.isEmpty || hasOldDemo) {
                 seedSampleMenu(restaurantId)
             }
         } catch (e: Exception) {
@@ -302,16 +306,31 @@ class FirestoreRepository {
         return try {
             val restRef = db.collection("restaurants").document(restaurantId)
 
+            // 0. Eski tüm demo ürün ve kategorileri tamamen sil (Pizza, Burger vb. temizle)
+            try {
+                val oldItems = restRef.collection("menuItems").get().await()
+                for (doc in oldItems.documents) {
+                    doc.reference.delete().await()
+                }
+                val oldCats = restRef.collection("categories").get().await()
+                for (doc in oldCats.documents) {
+                    doc.reference.delete().await()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             restRef.set(
-                mapOf(
-                    "name" to "Sade.C Kahve Gerze",
-                    "slug" to restaurantId,
-                    "address" to "Gerze / Sinop",
-                    "phone" to "0555 123 45 67",
-                    "instagram" to "@sadeckahve",
-                    "logoUrl" to "logo.png"
+                Restaurant(
+                    id = restaurantId,
+                    name = "Sade.C Kahve Gerze",
+                    slug = restaurantId,
+                    address = "Gerze / Sinop",
+                    phone = "0555 123 45 67",
+                    instagram = "@sadeckahve",
+                    logoUrl = "logo.png"
                 ),
-                com.google.firebase.firestore.SetOptions.merge()
+                SetOptions.merge()
             ).await()
 
             // 1. Kategoriler
@@ -399,13 +418,14 @@ class FirestoreRepository {
                 restRef.collection("menuItems").add(item).await()
             }
 
-            // Masalar
+            // Masalar (Şifreli Güvenlik Anahtarları ile)
             for (i in 1..8) {
-                restRef.collection("tables").document("table-$i").set(TableItem(id = "table-$i", label = "Masa $i", isActive = true)).await()
+                val key = "sk_t${i}_" + (1000..9999).random()
+                restRef.collection("tables").document("table-$i").set(TableItem(id = "table-$i", label = "Masa $i", isActive = true, qrKey = key)).await()
             }
-            restRef.collection("tables").document("table-bahce-1").set(TableItem(id = "table-bahce-1", label = "Bahçe 1", isActive = true)).await()
-            restRef.collection("tables").document("table-bahce-2").set(TableItem(id = "table-bahce-2", label = "Bahçe 2", isActive = true)).await()
-            restRef.collection("tables").document("table-teras-1").set(TableItem(id = "table-teras-1", label = "Teras 1", isActive = true)).await()
+            restRef.collection("tables").document("table-bahce-1").set(TableItem(id = "table-bahce-1", label = "Bahçe 1", isActive = true, qrKey = "sk_bh1_" + (1000..9999).random())).await()
+            restRef.collection("tables").document("table-bahce-2").set(TableItem(id = "table-bahce-2", label = "Bahçe 2", isActive = true, qrKey = "sk_bh2_" + (1000..9999).random())).await()
+            restRef.collection("tables").document("table-teras-1").set(TableItem(id = "table-teras-1", label = "Teras 1", isActive = true, qrKey = "sk_tr1_" + (1000..9999).random())).await()
 
             Result.success(Unit)
         } catch (e: Exception) {

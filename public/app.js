@@ -200,25 +200,32 @@ function listenRestaurantData() {
 function listenCategories() {
   db.collection("restaurants").doc(currentRestId).collection("categories")
     .orderBy("sortOrder", "asc")
-    .onSnapshot(snapshot => {
+    .onSnapshot(async snapshot => {
       categories = [];
       snapshot.forEach(doc => {
         categories.push({ id: doc.id, ...doc.data() });
       });
 
-      if (categories.length === 0) {
-        // Otomatik olarak tüm Sade C Gerze menüsünü yükle
-        seedSampleData().catch(console.error);
+      const hasOldDummy = categories.some(c => 
+        (c.name && (c.name.toLowerCase().includes("pizza") || c.name.toLowerCase().includes("burger")))
+      );
+
+      if (categories.length === 0 || hasOldDummy) {
+        // Eski demo ürünleri sil ve sadece Sade C Gerze menüsünü yükle
+        await seedSampleData();
       } else {
         renderCategories();
       }
     }, err => {
       console.log("Kategori dinleme hatası:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("categories")
-        .onSnapshot(snap => {
+        .onSnapshot(async snap => {
           categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          if (categories.length === 0) {
-            seedSampleData().catch(console.error);
+          const hasOldDummy = categories.some(c => 
+            (c.name && (c.name.toLowerCase().includes("pizza") || c.name.toLowerCase().includes("burger")))
+          );
+          if (categories.length === 0 || hasOldDummy) {
+            await seedSampleData();
           } else {
             renderCategories();
           }
@@ -616,6 +623,13 @@ btnNewOrderEl.addEventListener("click", () => {
 async function seedSampleData() {
   try {
     const restRef = db.collection("restaurants").doc(currentRestId);
+
+    // Eski demo ürün ve kategorileri tamamen sil
+    const oldItemsSnap = await restRef.collection("menuItems").get();
+    await Promise.all(oldItemsSnap.docs.map(d => d.ref.delete()));
+
+    const oldCatsSnap = await restRef.collection("categories").get();
+    await Promise.all(oldCatsSnap.docs.map(c => c.ref.delete()));
     
     await restRef.set({
       name: "Sade.C Kahve Gerze",
