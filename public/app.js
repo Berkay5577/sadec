@@ -317,7 +317,11 @@ function checkAndShowPromoModal(campaign) {
   }
 
   if (campaign.priceText && campaign.priceText.trim() !== "") {
-    if (promoPrice) promoPrice.textContent = campaign.priceText;
+    let pText = campaign.priceText.trim();
+    if (!pText.startsWith("₺") && !pText.toLowerCase().includes("tl")) {
+      pText = "₺" + pText;
+    }
+    if (promoPrice) promoPrice.textContent = pText;
     if (promoPriceRow) promoPriceRow.style.display = "block";
   } else {
     if (promoPriceRow) promoPriceRow.style.display = "none";

@@ -393,13 +393,18 @@ fun SettingsScreen(
                     // Save Button
                     Button(
                         onClick = {
+                            val cleanPrice = popupPrice.trim()
+                            val formattedPrice = if (cleanPrice.isNotBlank()) {
+                                if (!cleanPrice.startsWith("₺") && !cleanPrice.contains("TL", ignoreCase = true)) "₺$cleanPrice" else cleanPrice
+                            } else ""
+
                             val newCampaign = PopupCampaign(
                                 isActive = isPopupActive,
                                 badge = popupBadge.ifBlank { "DENEDİNİZ Mİ? 🌟" },
                                 title = popupTitle.trim(),
                                 description = popupDesc.trim(),
                                 imageUrl = existingCampaign?.imageUrl ?: "",
-                                priceText = popupPrice.trim(),
+                                priceText = formattedPrice,
                                 buttonText = popupButtonText.ifBlank { "Hemen Keşfet ✨" },
                                 targetMenuItemId = selectedTargetItemId,
                                 updatedAt = System.currentTimeMillis()
