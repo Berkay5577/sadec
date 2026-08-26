@@ -1,25 +1,22 @@
 package com.example.sadec.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.sadec.data.model.Category
-import com.example.sadec.data.model.MenuItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
 
@@ -27,25 +24,26 @@ import com.example.sadec.ui.viewmodel.MainViewModel
 @Composable
 fun MenuManagementScreen(
     viewModel: MainViewModel,
-    onAddProduct: () -> Unit,
-    onEditProduct: (MenuItem) -> Unit
+    onCategoryClick: (Category) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
     val categories by viewModel.categories.collectAsState()
     val menuItems by viewModel.menuItems.collectAsState()
 
     var showAddCategoryDialog by remember { mutableStateOf(false) }
-    var editingCategory by remember { mutableStateOf<Category?>(null) }
     var categoryNameInput by remember { mutableStateOf("") }
-    var categoryOrderInput by remember { mutableStateOf("1") }
+    var categoryOrderInput by remember { mutableStateOf((categories.size + 1).toString()) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Menü Yönetimi", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = { viewModel.seedSampleMenu() }) {
-                        Icon(Icons.Default.AutoFixHigh, contentDescription = "Örnek Menü Yükle", tint = OrangePrimary)
+                title = {
+                    Column {
+                        Text("Menü & Kategoriler", fontWeight = FontWeight.Bold, color = ForestGreen)
+                        Text(
+                            text = "${categories.size} Kategori • ${menuItems.size} Ürün",
+                            fontSize = 12.sp,
+                            color = SageGreen
+                        )
                     }
                 }
             )
@@ -53,19 +51,21 @@ fun MenuManagementScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    if (selectedTab == 0) {
-                        onAddProduct()
-                    } else {
-                        editingCategory = null
-                        categoryNameInput = ""
-                        categoryOrderInput = (categories.size + 1).toString()
-                        showAddCategoryDialog = true
-                    }
+                    categoryNameInput = ""
+                    categoryOrderInput = (categories.size + 1).toString()
+                    showAddCategoryDialog = true
                 },
-                containerColor = OrangePrimary,
-                contentColor = Color.White
+                containerColor = ForestGreen,
+                contentColor = WarmGold
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Ekle")
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Kategori Ekle")
+                    Text("Yeni Kategori Ekle", fontWeight = FontWeight.Bold)
+                }
             }
         }
     ) { padding ->
@@ -73,129 +73,101 @@ fun MenuManagementScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(horizontal = 16.dp)
         ) {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Ürünler (${menuItems.size})", fontWeight = FontWeight.Bold) }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Kategoriler (${categories.size})", fontWeight = FontWeight.Bold) }
-                )
-            }
-
-            if (selectedTab == 0) {
-                // PRODUCTS TAB
-                if (menuItems.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Henüz ürün eklenmemiş.", color = Slate500)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(menuItems, key = { it.id }) { item ->
-                            val categoryName = categories.find { it.id == item.categoryId }?.name ?: "Genel"
-                            ProductManagementCard(
-                                item = item,
-                                categoryName = categoryName,
-                                onEdit = { onEditProduct(item) },
-                                onDelete = { viewModel.deleteMenuItem(item.id) },
-                                onToggleAvailable = { isAvail ->
-                                    viewModel.toggleMenuItemAvailability(item.id, isAvail)
-                                }
-                            )
-                        }
+            if (categories.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("📂", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Henüz kategori eklenmemiş",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreen
+                        )
+                        Text(
+                            text = "Menünüzü oluşturmak için aşağıdaki 'Yeni Kategori Ekle' butonuna basarak ilk kategorinizi oluşturun.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Slate500,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
                     }
                 }
             } else {
-                // CATEGORIES TAB
+                Text(
+                    text = "Kategoriler (Detay ve ürünler için dokunun)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Slate500,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
                     items(categories, key = { it.id }) { cat ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(cat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    Text("Sıra No: ${cat.sortOrder}", fontSize = 12.sp, color = Slate500)
-                                }
-                                Row {
-                                    IconButton(onClick = {
-                                        editingCategory = cat
-                                        categoryNameInput = cat.name
-                                        categoryOrderInput = cat.sortOrder.toString()
-                                        showAddCategoryDialog = true
-                                    }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = InfoBlue)
-                                    }
-                                    IconButton(onClick = { viewModel.deleteCategory(cat.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Sil", tint = DangerRed)
-                                    }
-                                }
-                            }
-                        }
+                        val count = menuItems.count { it.categoryId == cat.id }
+                        CategoryListCard(
+                            category = cat,
+                            productCount = count,
+                            onClick = { onCategoryClick(cat) }
+                        )
                     }
                 }
             }
         }
     }
 
-    // Add / Edit Category Dialog
+    // Add New Category Dialog
     if (showAddCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showAddCategoryDialog = false },
-            title = { Text(if (editingCategory != null) "Kategoriyi Düzenle" else "Yeni Kategori Ekle") },
+            title = { Text("Yeni Kategori Ekle", fontWeight = FontWeight.Bold, color = ForestGreen) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Menüde görünecek kategori adını girin (Örn: Sıcak Kahveler):", fontSize = 13.sp, color = Slate500)
                     OutlinedTextField(
                         value = categoryNameInput,
                         onValueChange = { categoryNameInput = it },
-                        label = { Text("Kategori Adı (Örn: Pizzalar)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text("Kategori Adı") },
+                        placeholder = { Text("Örn: Soğuk Kahveler") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     )
                     OutlinedTextField(
                         value = categoryOrderInput,
                         onValueChange = { categoryOrderInput = it },
-                        label = { Text("Sıralama (1, 2, 3...)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text("Sıra Numarası") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val order = categoryOrderInput.toIntOrNull() ?: 1
-                        viewModel.saveCategory(categoryNameInput.trim(), order, editingCategory?.id ?: "")
-                        showAddCategoryDialog = false
+                        if (categoryNameInput.isNotBlank()) {
+                            val order = categoryOrderInput.toIntOrNull() ?: (categories.size + 1)
+                            viewModel.saveCategory(categoryNameInput.trim(), order)
+                            showAddCategoryDialog = false
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
                 ) {
-                    Text("Kaydet")
+                    Text("Kategoriyi Oluştur", color = WarmGold, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddCategoryDialog = false }) {
-                    Text("İptal")
+                    Text("Vazgeç")
                 }
             }
         )
@@ -203,15 +175,15 @@ fun MenuManagementScreen(
 }
 
 @Composable
-fun ProductManagementCard(
-    item: MenuItem,
-    categoryName: String,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onToggleAvailable: (Boolean) -> Unit
+fun CategoryListCard(
+    category: Category,
+    productCount: Int,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -219,83 +191,45 @@ fun ProductManagementCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Product Image (Async with Coil)
-            Box(
-                modifier = Modifier
-                    .size(70.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Slate100)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                if (item.imageUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = item.imageUrl,
-                        contentDescription = item.name,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Fastfood,
-                        contentDescription = null,
-                        tint = Slate500,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .align(Alignment.Center)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Surface(
-                    color = Slate100,
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.padding(vertical = 2.dp)
+                    color = SoftMintGreen,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(48.dp)
                 ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("📁", fontSize = 22.sp)
+                    }
+                }
+
+                Column {
                     Text(
-                        text = categoryName,
-                        fontSize = 11.sp,
-                        color = Slate700,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        text = category.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ForestGreen
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "$productCount Ürün • Sıra #${category.sortOrder}",
+                        fontSize = 13.sp,
+                        color = SageGreen
                     )
                 }
-                Text(
-                    text = "₺${"%.2f".format(item.price)}",
-                    fontWeight = FontWeight.Bold,
-                    color = OrangePrimary,
-                    fontSize = 14.sp
-                )
             }
 
-            Column(horizontalAlignment = Alignment.End) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (item.isAvailable) "Stokta" else "Tükendi",
-                        fontSize = 11.sp,
-                        color = if (item.isAvailable) SuccessGreen else DangerRed,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Switch(
-                        checked = item.isAvailable,
-                        onCheckedChange = onToggleAvailable,
-                        colors = SwitchDefaults.colors(checkedThumbColor = OrangePrimary)
-                    )
-                }
-                Row {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = InfoBlue, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Sil", tint = DangerRed, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Detay",
+                tint = ForestGreen
+            )
         }
     }
 }

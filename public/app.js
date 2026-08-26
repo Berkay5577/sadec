@@ -9,7 +9,7 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 
 auth.signInAnonymously().catch(err => {
-  console.log("Anonymous sign-in skipped:", err.message);
+  console.log("Anonymous auth skipped:", err.message);
 });
 
 // App State
@@ -28,39 +28,13 @@ let selectedProduct = null;
 let currentModalQty = 1;
 let currentTrackingOrderId = null;
 let orderTrackingUnsubscribe = null;
-let currentView = "categories"; // 'categories' or 'items'
-
-// Category icon/color mapping for beautiful cards
-const categoryMeta = {
-  'sıcak': { icon: '☕', gradient: 'linear-gradient(135deg, #1E3A2F 0%, #2D5341 50%, #3a6b56 100%)' },
-  'soğuk': { icon: '🧊', gradient: 'linear-gradient(135deg, #1a4a3a 0%, #2D5341 50%, #4a8b6e 100%)' },
-  'spesiyal': { icon: '🥪', gradient: 'linear-gradient(135deg, #2D5341 0%, #1E3A2F 50%, #3d7a5f 100%)' },
-  'sandviç': { icon: '🥪', gradient: 'linear-gradient(135deg, #2D5341 0%, #1E3A2F 50%, #3d7a5f 100%)' },
-  'atıştırmalık': { icon: '🥐', gradient: 'linear-gradient(135deg, #233d32 0%, #3a6b56 50%, #1E3A2F 100%)' },
-  'tost': { icon: '🥐', gradient: 'linear-gradient(135deg, #233d32 0%, #3a6b56 50%, #1E3A2F 100%)' },
-  'tatlı': { icon: '🍰', gradient: 'linear-gradient(135deg, #3a2e1e 0%, #5a4530 50%, #2D5341 100%)' },
-  'pasta': { icon: '🍰', gradient: 'linear-gradient(135deg, #3a2e1e 0%, #5a4530 50%, #2D5341 100%)' },
-  'default': { icon: '🍽️', gradient: 'linear-gradient(135deg, #1E3A2F 0%, #2D5341 100%)' }
-};
-
-function getCategoryMeta(catName) {
-  const lower = catName.toLowerCase();
-  for (const [key, val] of Object.entries(categoryMeta)) {
-    if (key !== 'default' && lower.includes(key)) return val;
-  }
-  return categoryMeta['default'];
-}
 
 // DOM Elements
 const securityBlockViewEl = document.getElementById("securityBlockView");
 const menuViewEl = document.getElementById("menuView");
 const restNameEl = document.getElementById("restName");
-const tableBadgeEl = document.getElementById("tableBadge");
 const tableLabelTextEl = document.getElementById("tableLabelText");
-const categoryLandingEl = document.getElementById("categoryLanding");
-const btnBackToCategoriesEl = document.getElementById("btnBackToCategories");
 const categoryNavEl = document.getElementById("categoryNav");
-const menuSectionEl = document.getElementById("menuSection");
 const menuItemsContainerEl = document.getElementById("menuItemsContainer");
 const loadingIndicatorEl = document.getElementById("loadingIndicator");
 const searchInputEl = document.getElementById("searchInput");
@@ -71,6 +45,7 @@ const cartBarTotalEl = document.getElementById("cartBarTotal");
 
 const productModalOverlay = document.getElementById("productModalOverlay");
 const btnCloseProductModal = document.getElementById("btnCloseProductModal");
+const modalImgContainer = document.getElementById("modalImgContainer");
 const modalProductImg = document.getElementById("modalProductImg");
 const modalProductTitle = document.getElementById("modalProductTitle");
 const modalProductDesc = document.getElementById("modalProductDesc");
@@ -90,6 +65,7 @@ const cartModalTotalPrice = document.getElementById("cartModalTotalPrice");
 const cartModalTable = document.getElementById("cartModalTable");
 const cartOrderNote = document.getElementById("cartOrderNote");
 const btnSubmitOrder = document.getElementById("btnSubmitOrder");
+const cartCustomerNameInput = document.getElementById("cartCustomerName");
 
 const trackingViewEl = document.getElementById("trackingView");
 const trackTableTextEl = document.getElementById("trackTableText");
@@ -98,6 +74,7 @@ const trackStatusBadgeEl = document.getElementById("trackStatusBadge");
 const trackItemsListEl = document.getElementById("trackItemsList");
 const trackTotalAmountEl = document.getElementById("trackTotalAmount");
 const btnNewOrderEl = document.getElementById("btnNewOrder");
+const trackCustomerNameTextEl = document.getElementById("trackCustomerNameText");
 const stepPending = document.getElementById("stepPending");
 const stepPreparing = document.getElementById("stepPreparing");
 const stepReady = document.getElementById("stepReady");
@@ -106,43 +83,6 @@ const stepDelivered = document.getElementById("stepDelivered");
 function formatCurrency(amount) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 }
-
-// ========== VIEW MANAGEMENT ==========
-function showCategoryLanding() {
-  if (categories.length === 0) {
-    showMenuItems("all");
-    return;
-  }
-  currentView = "categories";
-  categoryLandingEl.style.display = "grid";
-  menuSectionEl.style.display = "none";
-  categoryNavEl.style.display = "none";
-  btnBackToCategoriesEl.style.display = "none";
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function showMenuItems(categoryId) {
-  currentView = "items";
-  activeCategory = categoryId || "all";
-  categoryLandingEl.style.display = "none";
-  menuSectionEl.style.display = "block";
-  categoryNavEl.style.display = categories.length > 0 ? "flex" : "none";
-  btnBackToCategoriesEl.style.display = categories.length > 0 ? "flex" : "none";
-  
-  // Update active tab
-  document.querySelectorAll(".category-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.category === activeCategory);
-  });
-  
-  renderMenuItems();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-btnBackToCategoriesEl.addEventListener("click", () => {
-  searchInputEl.value = "";
-  searchQuery = "";
-  showCategoryLanding();
-});
 
 // ========== URL PARAMS & SECURITY ==========
 function initUrlParams() {
@@ -235,13 +175,13 @@ function listenRestaurantData() {
       const data = doc.data();
       if (data.name) {
         restNameEl.textContent = data.name;
-        document.title = `${data.name} - QR Menü`;
+        document.title = `${data.name} — Menü`;
       }
     }
   }, err => console.log("Restaurant listen:", err.message));
 }
 
-// ========== CATEGORIES ==========
+// ========== CATEGORIES (Real-time) ==========
 function listenCategories() {
   db.collection("restaurants").doc(currentRestId).collection("categories")
     .orderBy("sortOrder", "asc")
@@ -250,68 +190,36 @@ function listenCategories() {
       snapshot.forEach(doc => {
         categories.push({ id: doc.id, ...doc.data() });
       });
-
-      if (categories.length === 0) {
-        showMenuItems("all");
-      } else {
-        renderCategoryLanding();
-        renderCategoryTabs();
-      }
+      renderCategoryTabs();
+      renderMenuItems();
     }, err => {
       console.log("Category listen error:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("categories")
         .onSnapshot(snap => {
           categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          if (categories.length === 0) {
-            showMenuItems("all");
-          } else {
-            renderCategoryLanding();
-            renderCategoryTabs();
-          }
+          renderCategoryTabs();
+          renderMenuItems();
         });
     });
 }
 
-function renderCategoryLanding() {
-  if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
-  
-  let html = '';
-  categories.forEach((cat, index) => {
-    const meta = getCategoryMeta(cat.name);
-    const itemCount = menuItems.filter(i => i.categoryId === cat.id && i.isAvailable !== false).length;
-    
-    html += `
-      <div class="category-card" data-category-id="${cat.id}" style="background: ${meta.gradient}; animation-delay: ${index * 0.08}s;">
-        <div class="category-card-icon">${meta.icon}</div>
-        <div class="category-card-overlay">
-          <div class="category-card-name">${cat.name}</div>
-          ${itemCount > 0 ? `<div class="category-card-count">${itemCount} ürün</div>` : ''}
-        </div>
-      </div>
-    `;
-  });
-  
-  categoryLandingEl.innerHTML = html;
-  
-  document.querySelectorAll(".category-card").forEach(card => {
-    card.addEventListener("click", () => {
-      const catId = card.dataset.categoryId;
-      showMenuItems(catId);
-    });
-  });
-}
-
 function renderCategoryTabs() {
-  categoryNavEl.innerHTML = `<button class="category-btn ${activeCategory === 'all' ? 'active' : ''}" data-category="all">Tümü</button>`;
-  
+  if (categories.length === 0) {
+    categoryNavEl.style.display = "none";
+    return;
+  }
+
+  categoryNavEl.style.display = "flex";
+  categoryNavEl.innerHTML = `<button class="cat-pill ${activeCategory === 'all' ? 'active' : ''}" data-category="all">Tümü</button>`;
+
   categories.forEach(cat => {
     const btn = document.createElement("button");
-    btn.className = `category-btn ${activeCategory === cat.id ? 'active' : ''}`;
+    btn.className = `cat-pill ${activeCategory === cat.id ? 'active' : ''}`;
     btn.dataset.category = cat.id;
     btn.textContent = cat.name;
     btn.addEventListener("click", () => {
       activeCategory = cat.id;
-      document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".cat-pill").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       renderMenuItems();
     });
@@ -320,13 +228,13 @@ function renderCategoryTabs() {
 
   categoryNavEl.querySelector('[data-category="all"]').addEventListener("click", (e) => {
     activeCategory = "all";
-    document.querySelectorAll(".category-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".cat-pill").forEach(b => b.classList.remove("active"));
     e.target.classList.add("active");
     renderMenuItems();
   });
 }
 
-// ========== MENU ITEMS ==========
+// ========== MENU ITEMS (Real-time) ==========
 function listenMenuItems() {
   db.collection("restaurants").doc(currentRestId).collection("menuItems")
     .orderBy("sortOrder", "asc")
@@ -336,23 +244,14 @@ function listenMenuItems() {
         menuItems.push({ id: doc.id, ...doc.data() });
       });
       if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
-      
-      if (currentView === "categories") {
-        renderCategoryLanding();
-      } else {
-        renderMenuItems();
-      }
+      renderMenuItems();
     }, err => {
-      console.log("Menu listen error, trying without index:", err.message);
+      console.log("Menu items error:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("menuItems")
         .onSnapshot(snap => {
           menuItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
-          if (currentView === "categories") {
-            renderCategoryLanding();
-          } else {
-            renderMenuItems();
-          }
+          renderMenuItems();
         });
     });
 }
@@ -375,39 +274,42 @@ function renderMenuItems() {
   if (filtered.length === 0) {
     menuItemsContainerEl.innerHTML = `
       <div class="empty-state">
-        <div style="font-size: 2rem; margin-bottom: 8px;">☕</div>
-        <p>Aradığınız kriterde ürün bulunamadı.</p>
+        <div style="font-size: 2.2rem; margin-bottom: 8px;">☕</div>
+        <p style="font-size: 0.95rem; font-weight: 500;">Henüz ürün bulunmuyor</p>
+        <small style="color: #94A39B;">Eklenen lezzetler anlık olarak burada görüntülenecektir.</small>
       </div>
     `;
     return;
   }
 
-  if (activeCategory === "all" && searchQuery.trim() === "") {
+  // If "all" is active and categories exist, group by category
+  if (activeCategory === "all" && categories.length > 0 && searchQuery.trim() === "") {
     let html = "";
     categories.forEach(cat => {
       const catItems = filtered.filter(i => i.categoryId === cat.id);
       if (catItems.length > 0) {
-        html += `<h3 class="section-title">${cat.name}</h3>`;
+        html += `<h3 class="category-header-title">${cat.name}</h3>`;
         catItems.forEach(item => {
-          html += createProductCardHtml(item);
+          html += createMinimalProductCard(item);
         });
       }
     });
 
     const otherItems = filtered.filter(i => !categories.some(c => c.id === i.categoryId));
     if (otherItems.length > 0) {
-      html += `<h3 class="section-title">Diğer Lezzetler</h3>`;
+      html += `<h3 class="category-header-title">Diğer Lezzetler</h3>`;
       otherItems.forEach(item => {
-        html += createProductCardHtml(item);
+        html += createMinimalProductCard(item);
       });
     }
 
     menuItemsContainerEl.innerHTML = html;
   } else {
-    menuItemsContainerEl.innerHTML = filtered.map(item => createProductCardHtml(item)).join("");
+    menuItemsContainerEl.innerHTML = filtered.map(item => createMinimalProductCard(item)).join("");
   }
 
-  document.querySelectorAll(".product-card").forEach(card => {
+  // Click handler to open product customization bottom sheet
+  document.querySelectorAll(".minimal-product-card").forEach(card => {
     card.addEventListener("click", () => {
       const itemId = card.dataset.id;
       const product = menuItems.find(i => i.id === itemId);
@@ -416,27 +318,23 @@ function renderMenuItems() {
   });
 }
 
-function createProductCardHtml(item) {
-  const fallbackImg = item.imageUrl || "images/hot_coffee.jpg";
+function createMinimalProductCard(item) {
+  const hasImage = Boolean(item.imageUrl && item.imageUrl.trim() !== "");
   const allergensHtml = (item.allergens && item.allergens.length > 0)
-    ? `<div class="allergens-list">${item.allergens.map(a => `<span class="allergen-tag">${a}</span>`).join("")}</div>`
+    ? `<div class="minimal-allergens">${item.allergens.map(a => `<span class="allergen-chip">${a}</span>`).join("")}</div>`
     : "";
 
   return `
-    <div class="product-card" data-id="${item.id}">
-      <div class="product-info">
-        <div>
-          <h3 class="product-title">${item.name}</h3>
-          <p class="product-desc">${item.description || ''}</p>
-          ${allergensHtml}
-        </div>
-        <div class="product-bottom">
-          <span class="product-price">${formatCurrency(item.price)}</span>
-        </div>
+    <div class="minimal-product-card" data-id="${item.id}">
+      <div class="minimal-product-info">
+        <h4 class="minimal-product-title">${item.name}</h4>
+        ${item.description ? `<p class="minimal-product-desc">${item.description}</p>` : ''}
+        ${allergensHtml}
+        <span class="minimal-product-price">${formatCurrency(item.price)}</span>
       </div>
-      <div class="product-image-container">
-        <img src="${fallbackImg}" alt="${item.name}" class="product-image" onerror="this.src='logo.png'">
-        <div class="add-btn-badge">+</div>
+      <div class="minimal-product-media">
+        <img src="${hasImage ? item.imageUrl : 'logo.png'}" alt="${item.name}" onerror="this.src='logo.png'">
+        <div class="minimal-add-btn">+</div>
       </div>
     </div>
   `;
@@ -445,12 +343,7 @@ function createProductCardHtml(item) {
 // ========== SEARCH ==========
 searchInputEl.addEventListener("input", (e) => {
   searchQuery = e.target.value;
-  if (searchQuery.trim() !== "") {
-    activeCategory = "all";
-    showMenuItems("all");
-  } else if (currentView === "items" && searchQuery.trim() === "") {
-    renderMenuItems();
-  }
+  renderMenuItems();
 });
 
 // ========== PRODUCT MODAL ==========
@@ -463,10 +356,16 @@ function openProductModal(product) {
   modalProductTitle.textContent = product.name;
   modalProductDesc.textContent = product.description || "Özel Sade.C reçetesiyle taptaze hazırlanır.";
   modalProductPrice.textContent = formatCurrency(product.price);
-  modalProductImg.src = product.imageUrl || "images/hot_coffee.jpg";
+
+  if (product.imageUrl && product.imageUrl.trim() !== "") {
+    modalImgContainer.style.display = "block";
+    modalProductImg.src = product.imageUrl;
+  } else {
+    modalImgContainer.style.display = "none";
+  }
 
   if (product.allergens && product.allergens.length > 0) {
-    modalAllergens.innerHTML = product.allergens.map(a => `<span class="allergen-tag">⚠️ ${a}</span>`).join("");
+    modalAllergens.innerHTML = product.allergens.map(a => `<span class="allergen-chip">⚠️ ${a}</span>`).join("");
   } else {
     modalAllergens.innerHTML = "";
   }
@@ -539,21 +438,21 @@ function updateCartUI() {
   }
 
   if (cart.length === 0) {
-    cartModalItems.innerHTML = `<p style="text-align: center; color: #64748b; padding: 20px;">Sepetiniz boş.</p>`;
+    cartModalItems.innerHTML = `<p style="text-align: center; color: #94A39B; padding: 24px 0;">Sepetiniz boş.</p>`;
     btnSubmitOrder.disabled = true;
   } else {
     btnSubmitOrder.disabled = false;
     cartModalItems.innerHTML = cart.map((item, idx) => `
-      <div class="cart-item-row">
-        <div class="cart-item-info">
-          <h4>${item.name}</h4>
-          <span>${formatCurrency(item.unitPrice)}</span>
-          ${item.note ? `<div class="cart-item-note">"${item.note}"</div>` : ''}
+      <div class="cart-item-entry">
+        <div>
+          <div class="cart-item-title">${item.name}</div>
+          <div class="cart-item-price">${formatCurrency(item.unitPrice)}</div>
+          ${item.note ? `<div class="cart-item-note-text">"${item.note}"</div>` : ''}
         </div>
-        <div class="qty-controls">
-          <button class="qty-btn" onclick="changeCartQty(${idx}, -1)">-</button>
-          <span class="qty-number">${item.quantity}</span>
-          <button class="qty-btn" onclick="changeCartQty(${idx}, 1)">+</button>
+        <div class="stepper">
+          <button class="step-btn" onclick="changeCartQty(${idx}, -1)">−</button>
+          <span class="step-value">${item.quantity}</span>
+          <button class="step-btn" onclick="changeCartQty(${idx}, 1)">+</button>
         </div>
       </div>
     `).join("");
@@ -588,12 +487,10 @@ cartModalOverlay.addEventListener("click", (e) => {
 btnSubmitOrder.addEventListener("click", async () => {
   if (cart.length === 0 || !isQrAuthorized) return;
 
-  const customerNameInput = document.getElementById("cartCustomerName");
-  const customerName = customerNameInput ? customerNameInput.value.trim() : "";
-
+  const customerName = cartCustomerNameInput ? cartCustomerNameInput.value.trim() : "";
   if (!customerName) {
-    alert("Lütfen siparişin kime teslim edileceğini belirtmek için adınızı yazınız 👤");
-    if (customerNameInput) customerNameInput.focus();
+    alert("Lütfen siparişin kime getirileceğini belirtmek için adınızı giriniz 👤");
+    if (cartCustomerNameInput) cartCustomerNameInput.focus();
     return;
   }
 
@@ -645,13 +542,12 @@ function startOrderTracking(orderId, initialData) {
 
   trackOrderNoEl.textContent = `#${orderId.slice(-5).toUpperCase()}`;
   trackTableTextEl.textContent = initialData.tableLabel;
-  const custNameEl = document.getElementById("trackCustomerNameText");
-  if (custNameEl) custNameEl.textContent = initialData.customerName || "Misafir";
+  if (trackCustomerNameTextEl) trackCustomerNameTextEl.textContent = initialData.customerName || "Misafir";
   trackTotalAmountEl.textContent = formatCurrency(initialData.totalPrice);
 
   trackItemsListEl.innerHTML = initialData.items.map(i => `
-    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-      <span>${i.quantity}x ${i.name} ${i.note ? `<small style="color: #d97706;">(${i.note})</small>` : ''}</span>
+    <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 4px;">
+      <span>${i.quantity}x ${i.name} ${i.note ? `<small style="color: #D97706;">(${i.note})</small>` : ''}</span>
       <span>${formatCurrency(i.unitPrice * i.quantity)}</span>
     </div>
   `).join("");
@@ -674,29 +570,29 @@ function updateTrackingUI(status) {
   [stepPending, stepPreparing, stepReady, stepDelivered].forEach(s => s.classList.remove("active"));
 
   if (status === "pending") {
-    trackStatusBadgeEl.className = "status-badge-lg status-pending";
+    trackStatusBadgeEl.className = "status-pill-lg status-pending";
     trackStatusBadgeEl.textContent = "🕒 Siparişiniz Alındı";
     stepPending.classList.add("active");
   } else if (status === "preparing") {
-    trackStatusBadgeEl.className = "status-badge-lg status-preparing";
+    trackStatusBadgeEl.className = "status-pill-lg status-preparing";
     trackStatusBadgeEl.textContent = "👨‍🍳 Barista Hazırlıyor";
     stepPending.classList.add("active");
     stepPreparing.classList.add("active");
   } else if (status === "ready") {
-    trackStatusBadgeEl.className = "status-badge-lg status-ready";
+    trackStatusBadgeEl.className = "status-pill-lg status-ready";
     trackStatusBadgeEl.textContent = "☕ Siparişiniz Hazır!";
     stepPending.classList.add("active");
     stepPreparing.classList.add("active");
     stepReady.classList.add("active");
   } else if (status === "delivered") {
-    trackStatusBadgeEl.className = "status-badge-lg status-delivered";
+    trackStatusBadgeEl.className = "status-pill-lg status-delivered";
     trackStatusBadgeEl.textContent = "✅ Masanıza Teslim Edildi";
     stepPending.classList.add("active");
     stepPreparing.classList.add("active");
     stepReady.classList.add("active");
     stepDelivered.classList.add("active");
   } else if (status === "cancelled") {
-    trackStatusBadgeEl.className = "status-badge-lg status-cancelled";
+    trackStatusBadgeEl.className = "status-pill-lg status-cancelled";
     trackStatusBadgeEl.textContent = "❌ Sipariş İptal Edildi";
   }
 }
@@ -704,7 +600,6 @@ function updateTrackingUI(status) {
 btnNewOrderEl.addEventListener("click", () => {
   trackingViewEl.style.display = "none";
   menuViewEl.style.display = "block";
-  showCategoryLanding();
 });
 
 // ========== START ==========

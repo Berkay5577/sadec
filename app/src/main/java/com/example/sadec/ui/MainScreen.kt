@@ -24,7 +24,8 @@ sealed class Screen {
     object Orders : Screen()
     data class OrderDetail(val order: Order) : Screen()
     object Menu : Screen()
-    data class AddEditProduct(val item: MenuItem?) : Screen()
+    data class CategoryDetail(val category: com.example.sadec.data.model.Category) : Screen()
+    data class AddEditProduct(val item: MenuItem?, val defaultCategoryId: String = "") : Screen()
     object Tables : Screen()
     object Settings : Screen()
     object Dashboard : Screen()
@@ -129,15 +130,27 @@ fun MainScreen(
                 is Screen.Menu -> {
                     MenuManagementScreen(
                         viewModel = viewModel,
-                        onAddProduct = { currentScreen = Screen.AddEditProduct(null) },
-                        onEditProduct = { currentScreen = Screen.AddEditProduct(it) }
+                        onCategoryClick = { currentScreen = Screen.CategoryDetail(it) }
+                    )
+                }
+                is Screen.CategoryDetail -> {
+                    CategoryDetailScreen(
+                        category = screen.category,
+                        viewModel = viewModel,
+                        onBack = { currentScreen = Screen.Menu },
+                        onAddProduct = { currentScreen = Screen.AddEditProduct(null, screen.category.id) },
+                        onEditProduct = { currentScreen = Screen.AddEditProduct(it, screen.category.id) }
                     )
                 }
                 is Screen.AddEditProduct -> {
                     AddEditProductScreen(
                         editingItem = screen.item,
+                        defaultCategoryId = screen.defaultCategoryId,
                         viewModel = viewModel,
-                        onBack = { currentScreen = Screen.Menu }
+                        onBack = {
+                            val targetCat = viewModel.categories.value.find { it.id == screen.defaultCategoryId }
+                            currentScreen = if (targetCat != null) Screen.CategoryDetail(targetCat) else Screen.Menu
+                        }
                     )
                 }
                 is Screen.Tables -> {

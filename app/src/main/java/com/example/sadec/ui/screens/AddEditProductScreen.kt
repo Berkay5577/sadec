@@ -27,15 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.sadec.data.model.MenuItem
-import com.example.sadec.ui.theme.OrangePrimary
-import com.example.sadec.ui.theme.Slate100
-import com.example.sadec.ui.theme.Slate500
+import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditProductScreen(
     editingItem: MenuItem?,
+    defaultCategoryId: String = "",
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
@@ -44,7 +43,12 @@ fun AddEditProductScreen(
     var name by remember { mutableStateOf(editingItem?.name ?: "") }
     var description by remember { mutableStateOf(editingItem?.description ?: "") }
     var priceStr by remember { mutableStateOf(editingItem?.let { "%.2f".format(it.price) } ?: "") }
-    var selectedCategoryId by remember { mutableStateOf(editingItem?.categoryId ?: categories.firstOrNull()?.id ?: "") }
+    var selectedCategoryId by remember {
+        mutableStateOf(
+            editingItem?.categoryId
+                ?: defaultCategoryId.ifBlank { categories.firstOrNull()?.id ?: "" }
+        )
+    }
     var imageUrl by remember { mutableStateOf(editingItem?.imageUrl ?: "") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var allergensStr by remember { mutableStateOf(editingItem?.allergens?.joinToString(", ") ?: "") }
@@ -63,10 +67,10 @@ fun AddEditProductScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (editingItem != null) "Ürünü Düzenle" else "Yeni Ürün Ekle", fontWeight = FontWeight.Bold) },
+                title = { Text(if (editingItem != null) "Ürünü Düzenle" else "Yeni Ürün Ekle", fontWeight = FontWeight.Bold, color = ForestGreen) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri", tint = ForestGreen)
                     }
                 }
             )
