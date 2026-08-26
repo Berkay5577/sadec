@@ -196,8 +196,23 @@ class MainViewModel @JvmOverloads constructor(
     fun updateOrderStatus(orderId: String, newStatus: String) {
         viewModelScope.launch {
             val res = firestoreRepository.updateOrderStatus(_restaurantId.value, orderId, newStatus)
-            res.onFailure {
+            res.onSuccess {
+                if (newStatus == "delivered") {
+                    _uiMessage.emit("Sipariş teslim edildi ve arşive aktarıldı! ✅")
+                }
+            }.onFailure {
                 _uiMessage.emit("Durum güncellenemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun cancelOrder(orderId: String, reason: String) {
+        viewModelScope.launch {
+            val res = firestoreRepository.cancelOrder(_restaurantId.value, orderId, reason)
+            res.onSuccess {
+                _uiMessage.emit("Sipariş iptal edildi ❌")
+            }.onFailure {
+                _uiMessage.emit("İptal işlemi başarısız: ${it.localizedMessage}")
             }
         }
     }

@@ -1,13 +1,14 @@
 package com.example.sadec.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,13 +31,15 @@ fun OrderDetailScreen(
     val timeFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
     val formattedTime = order.createdAt?.let { timeFormat.format(it) } ?: ""
 
+    var showCancelDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sipariş Detayı (#${order.id.takeLast(6).uppercase()})", fontWeight = FontWeight.Bold) },
+                title = { Text("Sipariş Detayı (#${order.id.takeLast(6).uppercase()})", fontWeight = FontWeight.Bold, color = ForestGreen) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri", tint = ForestGreen)
                     }
                 }
             )
@@ -64,7 +67,7 @@ fun OrderDetailScreen(
                                 text = order.tableLabel.ifBlank { "Masa" },
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = OrangeDark
+                                color = ForestGreen
                             )
                             if (order.customerName.isNotBlank()) {
                                 Text(
@@ -85,6 +88,23 @@ fun OrderDetailScreen(
                         OrderStatusBadge(status = order.status)
                     }
 
+                    if (order.cancelReason.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = Color(0xFFFEE2E2),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "❌ İptal Sebebi: ${order.cancelReason}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DangerRed,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Sipariş İşlemleri:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
                     Spacer(modifier = Modifier.height(10.dp))
@@ -95,7 +115,10 @@ fun OrderDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
-                            onClick = { viewModel.updateOrderStatus(order.id, "delivered") },
+                            onClick = {
+                                viewModel.updateOrderStatus(order.id, "delivered")
+                                onBack() // Teslim edildiğinde sayfadan çıkıp ana ekrana döner
+                            },
                             modifier = Modifier
                                 .weight(1.3f)
                                 .height(48.dp),
@@ -113,7 +136,7 @@ fun OrderDetailScreen(
                         }
 
                         Button(
-                            onClick = { viewModel.updateOrderStatus(order.id, "cancelled") },
+                            onClick = { showCancelDialog = true },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
@@ -134,7 +157,7 @@ fun OrderDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Sipariş Edilen Ürünler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Sipariş Edilen Ürünler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
             Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
@@ -155,12 +178,13 @@ fun OrderDetailScreen(
                                 Text(
                                     text = "${item.quantity}x ${item.name}",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
+                                    fontSize = 15.sp,
+                                    color = ForestGreen
                                 )
                                 Text(
                                     text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
                                     fontWeight = FontWeight.Bold,
-                                    color = OrangePrimary
+                                    color = WarmGold
                                 )
                             }
                             Text(
@@ -184,15 +208,15 @@ fun OrderDetailScreen(
             // Order Note & Summary Footer
             if (order.note.isNotBlank()) {
                 Surface(
-                    color = Slate100,
+                    color = SoftMintGreen,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Genel Sipariş Notu:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text(order.note, fontSize = 13.sp, color = Slate800)
+                        Text("Genel Sipariş Notu:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
+                        Text(order.note, fontSize = 13.sp, color = Slate700)
                     }
                 }
             }
@@ -200,7 +224,7 @@ fun OrderDetailScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = ForestGreen)
             ) {
                 Row(
                     modifier = Modifier
@@ -209,37 +233,97 @@ fun OrderDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Genel Toplam", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Genel Toplam", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(
                         text = "₺${"%.2f".format(order.totalPrice)}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = OrangePrimary
+                        color = WarmGold
                     )
                 }
             }
         }
     }
+
+    // Cancel Reason Dialog
+    if (showCancelDialog) {
+        CancelReasonDialog(
+            onConfirm = { reason ->
+                viewModel.cancelOrder(order.id, reason)
+                showCancelDialog = false
+                onBack() // İptal edildiğinde ana ekrana döner
+            },
+            onDismiss = { showCancelDialog = false }
+        )
+    }
 }
 
 @Composable
-fun StatusButton(
-    label: String,
-    isActive: Boolean,
-    color: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+fun CancelReasonDialog(
+    onConfirm: (reason: String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(38.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isActive) color else Slate100,
-            contentColor = if (isActive) Color.White else Slate700
-        ),
-        shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-    ) {
-        Text(label, fontSize = 12.sp, fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal)
-    }
+    val reasons = listOf(
+        "Müşteri vazgeçti / ayrıldı",
+        "Ürün tükendi / stok yetersiz",
+        "Hatalı / Yanlış sipariş",
+        "Masa boşaldı / Yanlış masa",
+        "Diğer..."
+    )
+    var selectedReason by remember { mutableStateOf(reasons[0]) }
+    var customReason by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Siparişi İptal Et", fontWeight = FontWeight.Bold, color = DangerRed) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Lütfen iptal gerekçesini seçin veya yazın:", fontSize = 13.sp, color = Slate500)
+
+                reasons.forEach { reason ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedReason = reason }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedReason == reason,
+                            onClick = { selectedReason = reason }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(reason, fontSize = 13.sp, fontWeight = if (selectedReason == reason) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                if (selectedReason == "Diğer...") {
+                    OutlinedTextField(
+                        value = customReason,
+                        onValueChange = { customReason = it },
+                        label = { Text("İptal Sebebi") },
+                        placeholder = { Text("Sebebi buraya yazınız...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalReason = if (selectedReason == "Diğer...") customReason.ifBlank { "Diğer" } else selectedReason
+                    onConfirm(finalReason)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = DangerRed)
+            ) {
+                Text("İptali Onayla ❌", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç")
+            }
+        }
+    )
 }

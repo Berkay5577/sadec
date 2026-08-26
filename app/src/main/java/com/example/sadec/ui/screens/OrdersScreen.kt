@@ -1,6 +1,5 @@
 package com.example.sadec.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,7 +7,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,12 +32,18 @@ fun OrdersScreen(
     val filter by viewModel.selectedStatusFilter.collectAsState()
     val restaurant by viewModel.restaurant.collectAsState()
 
+    // Varsayılan görünüm: Sadece aktif (teslim edilmemiş ve iptal edilmemiş) siparişleri gösterir
     val filteredOrders = remember(orders, filter) {
-        if (filter == "all") orders else orders.filter { it.status == filter }
+        when (filter) {
+            "all" -> orders.filter { it.status != "delivered" && it.status != "cancelled" }
+            "delivered" -> orders.filter { it.status == "delivered" }
+            "cancelled" -> orders.filter { it.status == "cancelled" }
+            else -> orders.filter { it.status == filter }
+        }
     }
 
-    val pendingCount = orders.count { it.status == "pending" }
-    val preparingCount = orders.count { it.status == "preparing" }
+    val activeCount = orders.count { it.status != "delivered" && it.status != "cancelled" }
+    var orderToCancel by remember { mutableStateOf<Order?>(null) }
 
     Scaffold(
         topBar = {
@@ -46,27 +51,28 @@ fun OrdersScreen(
                 title = {
                     Column {
                         Text(
-                            text = restaurant?.name ?: "Sipariş Yönetimi",
+                            text = restaurant?.name ?: "Sade.C Sipariş Yönetimi",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreen
                         )
                         Text(
-                            text = "Canlı Sipariş Akışı (${orders.size} Toplam)",
+                            text = "Canlı Sipariş Akışı ($activeCount Aktif)",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = SageGreen
                         )
                     }
                 },
                 actions = {
-                    if (pendingCount > 0) {
+                    if (activeCount > 0) {
                         Surface(
-                            color = OrangePrimary,
+                            color = ForestGreen,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.padding(end = 12.dp)
                         ) {
                             Text(
-                                text = "🔔 $pendingCount Yeni",
-                                color = Color.White,
+                                text = "🔔 $activeCount Aktif",
+                                color = WarmGold,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 fontSize = 13.sp
@@ -85,8 +91,7 @@ fun OrdersScreen(
             // Filter Chips Bar
             StatusFilterRow(
                 selectedFilter = filter,
-                pendingCount = pendingCount,
-                preparingCount = preparingCount,
+                activeCount = activeCount,
                 onFilterSelected = { viewModel.setStatusFilter(it) }
             )
 
@@ -106,9 +111,10 @@ fun OrdersScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Henüz sipariş bulunmuyor",
+                            text = if (filter == "all") "Bekleyen aktif sipariş yok 🎉" else "Bu kategoride sipariş bulunmuyor",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            color = ForestGreen
                         )
                         Text(
                             text = "Müşteriler QR menüyü okutup sipariş verdiğinde anlık olarak burada listelenecektir.",
@@ -128,8 +134,11 @@ fun OrdersScreen(
                         OrderCard(
                             order = order,
                             onClick = { onOrderClick(order) },
-                            onStatusChange = { newStatus ->
-                                viewModel.updateOrderStatus(order.id, newStatus)
+                            onDeliver = {
+                                viewModel.updateOrderStatus(order.id, "delivered")
+                            },
+                            onCancel = {
+                                orderToCancel = order
                             }
                         )
                     }
@@ -137,22 +146,29 @@ fun OrdersScreen(
             }
         }
     }
+
+    // Cancel Reason Dialog for Card Action
+    orderToCancel?.let { order ->
+        CancelReasonDialog(
+            onConfirm = { reason ->
+                viewModel.cancelOrder(order.id, reason)
+                orderToCancel = null
+            },
+            onDismiss = { orderToCancel = null }
+        )
+    }
 }
 
 @Composable
 fun StatusFilterRow(
     selectedFilter: String,
-    pendingCount: Int,
-    preparingCount: Int,
+    activeCount: Int,
     onFilterSelected: (String) -> Unit
 ) {
     val filters = listOf(
-        "all" to "Tümü",
-        "pending" to if (pendingCount > 0) "Bekleyen ($pendingCount)" else "Bekleyen",
-        "preparing" to if (preparingCount > 0) "Hazırlanan ($preparingCount)" else "Hazırlanıyor",
-        "ready" to "Hazır",
-        "delivered" to "Teslim Edildi",
-        "cancelled" to "İptal"
+        "all" to if (activeCount > 0) "Aktif Siparişler ($activeCount)" else "Aktif Siparişler",
+        "delivered" to "Teslim Edilenler",
+        "cancelled" to "İptal Edilenler"
     )
 
     LazyRow(
@@ -168,8 +184,8 @@ fun StatusFilterRow(
                 onClick = { onFilterSelected(key) },
                 label = { Text(label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = OrangePrimary,
-                    selectedLabelColor = Color.White
+                    selectedContainerColor = ForestGreen,
+                    selectedLabelColor = WarmGold
                 ),
                 shape = RoundedCornerShape(20.dp)
             )
@@ -181,7 +197,8 @@ fun StatusFilterRow(
 fun OrderCard(
     order: Order,
     onClick: () -> Unit,
-    onStatusChange: (String) -> Unit
+    onDeliver: () -> Unit,
+    onCancel: () -> Unit
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     val formattedTime = order.createdAt?.let { timeFormat.format(it) } ?: ""
@@ -195,7 +212,7 @@ fun OrderCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header Row: Table Label + Status Pill
+            // Header Row: Table Label + Customer Name + Status Pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -203,12 +220,12 @@ fun OrderCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        color = OrangeLight,
+                        color = SoftMintGreen,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = order.tableLabel.ifBlank { "Masa" },
-                            color = OrangeDark,
+                            color = ForestGreen,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -236,6 +253,23 @@ fun OrderCard(
                 OrderStatusBadge(status = order.status)
             }
 
+            if (order.cancelReason.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFFFEE2E2),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "❌ İptal Sebebi: ${order.cancelReason}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = DangerRed,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(10.dp))
 
             // Order Items Summary
@@ -248,7 +282,8 @@ fun OrderCard(
                         Text(
                             text = "${item.quantity}x ${item.name}",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            color = ForestGreen
                         )
                         Text(
                             text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
@@ -270,24 +305,24 @@ fun OrderCard(
             if (order.note.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
-                    color = Slate100,
+                    color = SoftMintGreen,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = "Müşteri Notu: ${order.note}",
                         fontSize = 12.sp,
-                        color = Slate800,
+                        color = ForestGreen,
                         modifier = Modifier.padding(8.dp)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = Slate100)
+            HorizontalDivider(color = Slate100)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Bottom Row: Total Price + Quick Action Buttons
+            // Bottom Row: Total Price + Action Buttons (Teslim Et & İptal)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -299,7 +334,7 @@ fun OrderCard(
                         text = "₺${"%.2f".format(order.totalPrice)}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = OrangePrimary
+                        color = WarmGold
                     )
                 }
 
@@ -307,7 +342,7 @@ fun OrderCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (order.status != "delivered" && order.status != "cancelled") {
                         Button(
-                            onClick = { onStatusChange("delivered") },
+                            onClick = onDeliver,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
@@ -316,7 +351,7 @@ fun OrderCard(
                         }
 
                         OutlinedButton(
-                            onClick = { onStatusChange("cancelled") },
+                            onClick = onCancel,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
@@ -332,24 +367,21 @@ fun OrderCard(
 
 @Composable
 fun OrderStatusBadge(status: String) {
-    val (bgColor, textColor, label) = when (status) {
-        "pending" -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), "Bekliyor 🕒")
-        "preparing" -> Triple(Color(0xFFE0E7FF), Color(0xFF4338CA), "Hazırlanıyor 👨‍🍳")
-        "ready" -> Triple(Color(0xFFD1FAE5), Color(0xFF059669), "Hazır 🍽️")
-        "delivered" -> Triple(Color(0xFFECFDF5), Color(0xFF047857), "Teslim Edildi ✅")
-        "cancelled" -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), "İptal ❌")
-        else -> Triple(Slate100, Slate700, status)
+    val (label, bg, fg) = when (status) {
+        "delivered" -> Triple("Teslim Edildi", SoftMintGreen, ForestGreen)
+        "cancelled" -> Triple("İptal Edildi", Color(0xFFFEE2E2), DangerRed)
+        else -> Triple("Bekliyor 🕒", Color(0xFFFEF3C7), WarningYellow)
     }
 
     Surface(
-        color = bgColor,
+        color = bg,
         shape = RoundedCornerShape(20.dp)
     ) {
         Text(
             text = label,
-            color = textColor,
-            fontSize = 12.sp,
+            color = fg,
             fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
         )
     }

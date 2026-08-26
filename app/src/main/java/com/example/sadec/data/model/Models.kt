@@ -50,10 +50,11 @@ data class Order(
     val tableId: String = "",
     val tableLabel: String = "",
     val customerName: String = "", // Müşterinin girdiği isim
-    val status: String = "pending", // pending, preparing, ready, delivered, cancelled
+    val status: String = "pending", // pending, delivered, cancelled
     val items: List<OrderItem> = emptyList(),
     val totalPrice: Double = 0.0,
     val note: String = "",
+    val cancelReason: String = "", // İptal gerekçesi
     @ServerTimestamp val createdAt: Date? = null,
     @ServerTimestamp val updatedAt: Date? = null
 )

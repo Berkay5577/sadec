@@ -123,6 +123,25 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun cancelOrder(restaurantId: String, orderId: String, reason: String): Result<Unit> {
+        return try {
+            db.collection("restaurants")
+                .document(restaurantId)
+                .collection("orders")
+                .document(orderId)
+                .update(
+                    mapOf(
+                        "status" to "cancelled",
+                        "cancelReason" to reason,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // -------------------------------------------------------------
     // CATEGORIES (Real-time Flow)
     // -------------------------------------------------------------
