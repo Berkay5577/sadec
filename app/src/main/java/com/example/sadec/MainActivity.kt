@@ -15,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.appcompat.app.AppCompatDelegate
 import com.example.sadec.ui.MainScreen
 import com.example.sadec.ui.screens.LoginScreen
 import com.example.sadec.ui.theme.SadecTheme
@@ -31,6 +32,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Karanlık modu sistem genelinde tamamen kapat
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
 
         askNotificationPermission()
