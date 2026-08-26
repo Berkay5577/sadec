@@ -1,6 +1,7 @@
 package com.example.sadec.data.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
@@ -35,14 +36,16 @@ data class MenuItem(
     val price: Double = 0.0,
     val imageUrl: String = "",
     val allergens: List<String> = emptyList(),
-    val isAvailable: Boolean = true,
+    @get:PropertyName("isAvailable") @set:PropertyName("isAvailable")
+    var isAvailable: Boolean = true,
     val sortOrder: Int = 0
 )
 
 data class TableItem(
     @DocumentId val id: String = "",
     val label: String = "",
-    val isActive: Boolean = true,
+    @get:PropertyName("isActive") @set:PropertyName("isActive")
+    var isActive: Boolean = true,
     val qrKey: String = "" // Güvenlik token'ı (QR kodun paylaşılmasını engeller)
 )
 

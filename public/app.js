@@ -86,6 +86,7 @@ const categoryCardsListEl = document.getElementById("categoryCardsList");
 const categoryItemsViewEl = document.getElementById("categoryItemsView");
 const btnBackToCategoriesEl = document.getElementById("btnBackToCategories");
 const activeCategoryHeaderTitleEl = document.getElementById("activeCategoryHeaderTitle");
+const activeCategoryCountBadgeEl = document.getElementById("activeCategoryCountBadge");
 
 const categoryNavEl = document.getElementById("categoryNav");
 const menuSectionEl = document.getElementById("menuSection");
@@ -149,14 +150,19 @@ function showMenuItems(categoryId, categoryTitle) {
   categoryLandingViewEl.style.display = "none";
   categoryItemsViewEl.style.display = "block";
 
+  let title = "Kategori";
   if (categoryTitle) {
-    activeCategoryHeaderTitleEl.textContent = categoryTitle;
+    title = categoryTitle;
   } else if (categoryId === "all") {
-    activeCategoryHeaderTitleEl.textContent = "Tüm Ürünler";
+    title = "Tüm Ürünler";
   } else {
     const found = categories.find(c => c.id === categoryId);
-    activeCategoryHeaderTitleEl.textContent = found ? found.name : "Kategori";
+    title = found ? found.name : "Kategori";
   }
+  if (activeCategoryHeaderTitleEl) activeCategoryHeaderTitleEl.textContent = title;
+
+  const count = menuItems.filter(i => (categoryId === "all" || i.categoryId === categoryId) && i.isAvailable !== false).length;
+  if (activeCategoryCountBadgeEl) activeCategoryCountBadgeEl.textContent = `${count} Çeşit`;
 
   // Update tabs
   document.querySelectorAll(".cat-pill").forEach(btn => {

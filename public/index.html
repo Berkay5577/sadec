@@ -75,18 +75,24 @@
 
       <!-- 2. CATEGORY ITEMS VIEW (Bir kategoriye tıklandığında veya aramada açılır) -->
       <section id="categoryItemsView" class="category-items-view" style="display: none;">
-        <!-- Top Back Navigation -->
-        <div class="items-view-header">
+        <!-- Clean Sticky Navigation Row -->
+        <div class="category-nav-bar">
           <button class="back-pill-btn" id="btnBackToCategories">
-            ← Tüm Kategoriler
+            <span class="back-arrow">←</span>
+            <span>Tüm Kategoriler</span>
           </button>
-          <span class="active-category-title" id="activeCategoryHeaderTitle">Kategori</span>
+          <span class="category-item-count-badge" id="activeCategoryCountBadge">0 Ürün</span>
         </div>
 
         <!-- Category Horizontal Filter Tabs -->
         <nav class="category-tabs" id="categoryNav">
           <button class="cat-pill active" data-category="all">Tümü</button>
         </nav>
+
+        <!-- Active Category Big Heading -->
+        <div class="active-category-banner">
+          <h2 class="active-category-heading" id="activeCategoryHeaderTitle">Sıcak Kahve & Sıcak İçecekler</h2>
+        </div>
 
         <!-- Menu Items Feed -->
         <main class="menu-feed" id="menuSection">

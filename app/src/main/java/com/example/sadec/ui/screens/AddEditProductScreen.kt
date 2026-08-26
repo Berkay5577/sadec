@@ -67,12 +67,18 @@ fun AddEditProductScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (editingItem != null) "Ürünü Düzenle" else "Yeni Ürün Ekle", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                title = { Text(if (editingItem != null) "Ürünü Düzenle" else "Yeni Ürün Ekle", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri", tint = ForestGreen)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri", tint = Color.White)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ForestGreen,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->

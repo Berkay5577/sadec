@@ -49,15 +49,21 @@ fun MenuManagementScreen(
                             text = "Menü & Kategoriler",
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
-                            color = ForestGreen
+                            color = Color.White
                         )
                         Text(
                             text = if (categories.isEmpty()) "Menü henüz boş" else "${categories.size} Kategori • ${menuItems.size} Ürün",
                             fontSize = 12.sp,
-                            color = SageGreen
+                            color = WarmGold
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ForestGreen,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         },
         floatingActionButton = {

@@ -16,6 +16,7 @@ import com.example.sadec.data.model.Order
 import com.example.sadec.ui.screens.*
 import com.example.sadec.ui.theme.ForestGreen
 import com.example.sadec.ui.theme.OrangePrimary
+import com.example.sadec.ui.theme.SageGreen
 import com.example.sadec.ui.theme.Slate500
 import com.example.sadec.ui.theme.WarmGold
 import com.example.sadec.ui.viewmodel.MainViewModel
@@ -54,15 +55,15 @@ fun MainScreen(
         bottomBar = {
             if (isRootScreen) {
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = ForestGreen,
                     tonalElevation = 8.dp
                 ) {
                     val navItemColors = NavigationBarItemDefaults.colors(
                         selectedIconColor = WarmGold,
-                        selectedTextColor = ForestGreen,
-                        indicatorColor = ForestGreen,
-                        unselectedIconColor = Slate500,
-                        unselectedTextColor = Slate500
+                        selectedTextColor = Color.White,
+                        indicatorColor = SageGreen,
+                        unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                        unselectedTextColor = Color.White.copy(alpha = 0.6f)
                     )
 
                     NavigationBarItem(

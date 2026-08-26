@@ -228,7 +228,12 @@ class FirestoreRepository {
                 .document(restaurantId)
                 .collection("menuItems")
                 .document(itemId)
-                .update("isAvailable", isAvailable)
+                .update(
+                    mapOf(
+                        "isAvailable" to isAvailable,
+                        "available" to isAvailable
+                    )
+                )
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {

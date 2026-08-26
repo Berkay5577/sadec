@@ -54,15 +54,21 @@ fun OrdersScreen(
                             text = restaurant?.name ?: "Sade.C Sipariş Yönetimi",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = ForestGreen
+                            color = Color.White
                         )
                         Text(
                             text = "Canlı Sipariş Akışı ($activeCount Aktif)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = SageGreen
+                            style = MaterialTheme.typography.bodySmall,
+                            color = WarmGold
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ForestGreen,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                ),
                 actions = {
                     if (activeCount > 0) {
                         Surface(

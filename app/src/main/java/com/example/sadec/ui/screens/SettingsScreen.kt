@@ -48,10 +48,18 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ayarlar & Restoran Bilgisi", fontWeight = FontWeight.Bold, color = ForestGreen) }
+                title = { Text("Ayarlar & Restoran Bilgisi", fontWeight = FontWeight.Bold, color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ForestGreen,
+                    titleContentColor = Color.White
+                )
             )
         }
     ) { padding ->
+        val tables by viewModel.tables.collectAsState()
+        val rawBaseUrl = restaurant?.webMenuUrl?.ifBlank { "https://sadec.vercel.app" } ?: "https://sadec.vercel.app"
+        val baseUrl = if (rawBaseUrl.startsWith("http")) rawBaseUrl else "https://$rawBaseUrl"
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -60,6 +68,71 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 📄 TOPLU QR KODLARI PDF ÇIKARTMA KARTI (ÜSTTE QR KOD, ALTTA MASA NO)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        com.example.sadec.util.QrPdfGenerator.generateAndSharePdf(
+                            context = context,
+                            tables = tables,
+                            restaurantId = restaurantId,
+                            baseUrl = baseUrl,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
+                        )
+                    },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("📄", fontSize = 22.sp)
+                            Text(
+                                text = "Masa QR Standlarını PDF Çıkart",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = ForestGreen
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Üstte QR kod, altta masa numarası olacak şekilde tüm masaları A4 baskıya hazır PDF olarak indirir/paylaşır.",
+                            fontSize = 12.sp,
+                            color = SageGreen,
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Surface(
+                        color = ForestGreen,
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "PDF Çıkart",
+                                tint = WarmGold,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
             // Restaurant Info Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

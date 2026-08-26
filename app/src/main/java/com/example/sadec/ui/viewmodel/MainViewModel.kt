@@ -229,8 +229,14 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             var finalImageUrl = imageUrl
             if (imageUri != null) {
-                val uploadRes = storageRepository.uploadProductImage(_restaurantId.value, imageUri)
+                val uploadRes = storageRepository.uploadCategoryImage(
+                    restaurantId = _restaurantId.value,
+                    categoryId = categoryId,
+                    imageUri = imageUri,
+                    oldImageUrl = imageUrl
+                )
                 uploadRes.onSuccess { url -> finalImageUrl = url }
+                    .onFailure { _uiMessage.emit("Görsel yüklenemedi: ${it.localizedMessage}") }
             }
             val cat = Category(id = categoryId, name = name, sortOrder = sortOrder, imageUrl = finalImageUrl)
             val res = firestoreRepository.saveCategory(_restaurantId.value, cat)
@@ -243,6 +249,7 @@ class MainViewModel @JvmOverloads constructor(
 
     fun deleteCategory(categoryId: String) {
         viewModelScope.launch {
+            val oldCat = _categories.value.find { it.id == categoryId }
             val res = firestoreRepository.deleteCategory(_restaurantId.value, categoryId)
             res.onSuccess { _uiMessage.emit("Kategori silindi.") }
                 .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
@@ -254,9 +261,15 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             var finalItem = item
             if (imageUri != null) {
-                val uploadRes = storageRepository.uploadProductImage(_restaurantId.value, imageUri)
+                val uploadRes = storageRepository.uploadProductImage(
+                    restaurantId = _restaurantId.value,
+                    imageUri = imageUri,
+                    oldImageUrl = item.imageUrl
+                )
                 uploadRes.onSuccess { url ->
                     finalItem = finalItem.copy(imageUrl = url)
+                }.onFailure {
+                    _uiMessage.emit("Ürün görseli yüklenemedi: ${it.localizedMessage}")
                 }
             }
 

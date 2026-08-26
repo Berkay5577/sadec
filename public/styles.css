@@ -346,38 +346,63 @@ body {
 /* ========================================================== */
 /* 2. CATEGORY ITEMS VIEW & ALLERGEN LETTERS */
 /* ========================================================== */
-.items-view-header {
+.category-nav-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 14px 20px 10px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border-light);
 }
 
 .back-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: var(--soft-sage);
   color: var(--primary-green);
-  border: 1px solid rgba(30, 58, 47, 0.15);
-  padding: 7px 14px;
+  border: 1px solid rgba(30, 58, 47, 0.18);
+  padding: 9px 18px;
   border-radius: var(--radius-full);
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: var(--shadow-subtle);
   transition: all 0.15s ease;
+}
+
+.back-arrow {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .back-pill-btn:active {
   transform: scale(0.96);
   background: var(--primary-green);
-  color: #FFFFFF;
+  color: var(--gold);
 }
 
-.active-category-title {
+.category-item-count-badge {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gold);
+  background: var(--gold-soft);
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(197, 159, 96, 0.3);
+}
+
+.active-category-banner {
+  padding: 10px 20px 6px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.active-category-heading {
   font-family: 'Playfair Display', serif;
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--primary-green);
+  letter-spacing: 0.2px;
 }
 
 /* Category Horizontal Tabs */

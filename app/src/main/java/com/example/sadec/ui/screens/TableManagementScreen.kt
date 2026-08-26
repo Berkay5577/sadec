@@ -53,13 +53,29 @@ fun TableManagementScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Masa & QR Kod Yönetimi", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                title = { Text("Masa & QR Kod Yönetimi", fontWeight = FontWeight.Bold, color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ForestGreen,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                ),
                 actions = {
+                    IconButton(onClick = {
+                        com.example.sadec.util.QrPdfGenerator.generateAndSharePdf(
+                            context = context,
+                            tables = tables,
+                            restaurantId = restaurantId,
+                            baseUrl = baseUrl,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
+                        )
+                    }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Tüm QR'ları PDF Çıkart", tint = WarmGold)
+                    }
                     IconButton(onClick = {
                         newTableLabel = "Masa ${tables.size + 1}"
                         showAddTableDialog = true
                     }) {
-                        Icon(Icons.Default.Add, contentDescription = "Masa Ekle", tint = ForestGreen)
+                        Icon(Icons.Default.Add, contentDescription = "Masa Ekle", tint = Color.White)
                     }
                 }
             )
