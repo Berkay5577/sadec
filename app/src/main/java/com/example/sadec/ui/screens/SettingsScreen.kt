@@ -145,31 +145,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Reset / Seed Sample Data
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Örnek Menü & Masaları Yükle", fontWeight = FontWeight.Bold)
-                        Text("Veritabanına zengin burger, pizza ve tatlı menüsü ekler.", fontSize = 12.sp, color = Slate500)
-                    }
-                    Button(
-                        onClick = { viewModel.seedSampleMenu() },
-                        colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
-                    ) {
-                        Text("Yükle 🍔")
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
