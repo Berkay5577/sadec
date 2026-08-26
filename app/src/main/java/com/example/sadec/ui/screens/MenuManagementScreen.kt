@@ -43,8 +43,9 @@ fun MenuManagementScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
                 title = {
-                    Column {
+                    Column(modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)) {
                         Text(
                             text = "Menü & Kategoriler",
                             fontWeight = FontWeight.Bold,

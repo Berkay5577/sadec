@@ -36,6 +36,16 @@ class MainActivity : ComponentActivity() {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
 
+        // Status Bar & Navigation Bar: Forest Green (#1E3A2F) with White Status Icons
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+        window.statusBarColor = android.graphics.Color.parseColor("#1E3A2F")
+        window.navigationBarColor = android.graphics.Color.parseColor("#1E3A2F")
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
         askNotificationPermission()
 
         setContent {

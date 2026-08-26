@@ -1,8 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme for Jetpack Compose -->
+    <!-- Base application theme for Sade.C (Always Forest Green Status Bar & White/Light Icons) -->
     <style name="Theme.Sadec" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Status bar color -->
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">#1E3A2F</item>
+        <item name="android:navigationBarColor">#1E3A2F</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

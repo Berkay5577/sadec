@@ -48,10 +48,11 @@ fun OrdersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
                 title = {
-                    Column {
+                    Column(modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)) {
                         Text(
-                            text = restaurant?.name ?: "Sade.C Sipariş Yönetimi",
+                            text = restaurant?.name ?: "Sade.C Kahve Gerze",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
