@@ -415,4 +415,16 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun savePopupCampaign(restaurantId: String, campaign: PopupCampaign): Result<Unit> {
+        return try {
+            db.collection("restaurants")
+                .document(restaurantId)
+                .set(mapOf("popupCampaign" to campaign), com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 }

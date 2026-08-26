@@ -132,6 +132,21 @@ const stepPreparing = document.getElementById("stepPreparing");
 const stepReady = document.getElementById("stepReady");
 const stepDelivered = document.getElementById("stepDelivered");
 
+// Promo / Campaign Modal Elements
+const promoModalOverlay = document.getElementById("promoModalOverlay");
+const btnClosePromoModal = document.getElementById("btnClosePromoModal");
+const promoImg = document.getElementById("promoImg");
+const promoBadge = document.getElementById("promoBadge");
+const promoTitle = document.getElementById("promoTitle");
+const promoDesc = document.getElementById("promoDesc");
+const promoPriceRow = document.getElementById("promoPriceRow");
+const promoPrice = document.getElementById("promoPrice");
+const btnPromoAction = document.getElementById("btnPromoAction");
+const promoBtnText = document.getElementById("promoBtnText");
+
+let activePromoCampaign = null;
+let hasPromoBeenShown = false;
+
 function formatCurrency(amount) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 }
@@ -263,7 +278,7 @@ function showMenuViewMain() {
   if (menuViewEl) menuViewEl.style.display = "block";
 }
 
-// ========== RESTAURANT DATA ==========
+// ========== RESTAURANT DATA & POP-UP CAMPAIGN ==========
 function listenRestaurantData() {
   db.collection("restaurants").doc(currentRestId).onSnapshot(doc => {
     if (doc.exists) {
@@ -272,8 +287,85 @@ function listenRestaurantData() {
         restNameEl.textContent = data.name;
         document.title = `${data.name} — QR Menü`;
       }
+
+      // Check Promo / Campaign Pop-up
+      if (data.popupCampaign && data.popupCampaign.isActive) {
+        activePromoCampaign = data.popupCampaign;
+        checkAndShowPromoModal(data.popupCampaign);
+      } else {
+        hidePromoModal();
+      }
     }
   }, err => console.log("Restaurant listen error:", err.message));
+}
+
+function checkAndShowPromoModal(campaign) {
+  const sessionKey = "sadec_promo_shown_" + (campaign.updatedAt || "default");
+  if (sessionStorage.getItem(sessionKey)) {
+    return; // Already seen in this session
+  }
+
+  if (promoBadge) promoBadge.textContent = campaign.badge || "DENEDİNİZ Mİ? 🌟";
+  if (promoTitle) promoTitle.textContent = campaign.title || "Özel Lezzet";
+  if (promoDesc) promoDesc.textContent = campaign.description || "";
+  
+  if (promoImg) {
+    promoImg.src = campaign.imageUrl || "images/hot_coffee.jpg";
+    if (promoImg.parentElement) {
+      promoImg.parentElement.style.display = campaign.imageUrl ? "block" : "none";
+    }
+  }
+
+  if (campaign.priceText && campaign.priceText.trim() !== "") {
+    if (promoPrice) promoPrice.textContent = campaign.priceText;
+    if (promoPriceRow) promoPriceRow.style.display = "block";
+  } else {
+    if (promoPriceRow) promoPriceRow.style.display = "none";
+  }
+
+  if (promoBtnText) {
+    promoBtnText.textContent = campaign.buttonText || "Hemen Keşfet ✨";
+  }
+
+  // Show after slight delay for smooth page entrance
+  setTimeout(() => {
+    if (promoModalOverlay && !hasPromoBeenShown && isQrAuthorized) {
+      promoModalOverlay.style.display = "flex";
+      hasPromoBeenShown = true;
+    }
+  }, 600);
+}
+
+function hidePromoModal() {
+  if (promoModalOverlay) promoModalOverlay.style.display = "none";
+  if (activePromoCampaign) {
+    const sessionKey = "sadec_promo_shown_" + (activePromoCampaign.updatedAt || "default");
+    sessionStorage.setItem(sessionKey, "true");
+  }
+}
+
+if (btnClosePromoModal) {
+  btnClosePromoModal.addEventListener("click", hidePromoModal);
+}
+
+if (promoModalOverlay) {
+  promoModalOverlay.addEventListener("click", (e) => {
+    if (e.target === promoModalOverlay) hidePromoModal();
+  });
+}
+
+if (btnPromoAction) {
+  btnPromoAction.addEventListener("click", () => {
+    hidePromoModal();
+    if (activePromoCampaign && activePromoCampaign.targetMenuItemId) {
+      const targetItem = menuItems.find(i => i.id === activePromoCampaign.targetMenuItemId);
+      if (targetItem) {
+        setTimeout(() => {
+          openProductModal(targetItem);
+        }, 250);
+      }
+    }
+  });
 }
 
 // ========== CATEGORIES ==========

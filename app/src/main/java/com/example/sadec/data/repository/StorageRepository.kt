@@ -58,6 +58,24 @@ class StorageRepository {
         }
     }
 
+    suspend fun uploadCampaignImage(
+        restaurantId: String,
+        imageUri: Uri,
+        oldImageUrl: String? = null
+    ): Result<String> {
+        return try {
+            deleteOldImageIfStorage(oldImageUrl)
+
+            val fileName = "campaign_${System.currentTimeMillis()}.jpg"
+            val imageRef = storage.reference.child("restaurants/$restaurantId/campaigns/$fileName")
+            imageRef.putFile(imageUri).await()
+            val downloadUrl = imageRef.downloadUrl.await().toString()
+            Result.success(downloadUrl)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private suspend fun deleteOldImageIfStorage(oldUrl: String?) {
         if (oldUrl.isNullOrBlank()) return
         try {

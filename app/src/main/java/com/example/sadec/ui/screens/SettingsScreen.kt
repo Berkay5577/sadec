@@ -2,6 +2,9 @@ package com.example.sadec.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,12 +23,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.sadec.R
+import com.example.sadec.data.model.PopupCampaign
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
 import com.example.sadec.util.SoundPlayer
@@ -39,10 +45,31 @@ fun SettingsScreen(
 ) {
     val restaurantId by viewModel.restaurantId.collectAsState()
     val restaurant by viewModel.restaurant.collectAsState()
+    val menuItems by viewModel.menuItems.collectAsState()
+    val tables by viewModel.tables.collectAsState()
     val context = LocalContext.current
 
-    var webUrlInput by remember(restaurant?.webMenuUrl) { 
-        mutableStateOf(restaurant?.webMenuUrl ?: "https://sadec.vercel.app") 
+    val rawBaseUrl = restaurant?.webMenuUrl?.ifBlank { "https://sadec.vercel.app" } ?: "https://sadec.vercel.app"
+    val baseUrl = if (rawBaseUrl.startsWith("http")) rawBaseUrl else "https://$rawBaseUrl"
+
+    // --- POP-UP CAMPAIGN STATE ---
+    val existingCampaign = restaurant?.popupCampaign
+    var isPopupActive by remember(existingCampaign) { mutableStateOf(existingCampaign?.isActive ?: false) }
+    var popupBadge by remember(existingCampaign) { mutableStateOf(existingCampaign?.badge ?: "DENEDİNİZ Mİ? 🌟") }
+    var popupTitle by remember(existingCampaign) { mutableStateOf(existingCampaign?.title ?: "") }
+    var popupDesc by remember(existingCampaign) { mutableStateOf(existingCampaign?.description ?: "") }
+    var popupPrice by remember(existingCampaign) { mutableStateOf(existingCampaign?.priceText ?: "") }
+    var popupButtonText by remember(existingCampaign) { mutableStateOf(existingCampaign?.buttonText ?: "Hemen Keşfet ✨") }
+    var selectedTargetItemId by remember(existingCampaign) { mutableStateOf(existingCampaign?.targetMenuItemId ?: "") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isTargetMenuDropdownExpanded by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+        }
     }
 
     Scaffold(
@@ -57,10 +84,6 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        val tables by viewModel.tables.collectAsState()
-        val rawBaseUrl = restaurant?.webMenuUrl?.ifBlank { "https://sadec.vercel.app" } ?: "https://sadec.vercel.app"
-        val baseUrl = if (rawBaseUrl.startsWith("http")) rawBaseUrl else "https://$rawBaseUrl"
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -69,7 +92,7 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 📄 TOPLU QR KODLARI PDF ÇIKARTMA KARTI (ÜSTTE QR KOD, ALTTA MASA NO)
+            // 📄 TOPLU QR KODLARI PDF ÇIKARTMA KARTI
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -84,7 +107,7 @@ fun SettingsScreen(
                     },
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f)),
+                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
             ) {
                 Row(
@@ -134,6 +157,277 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // 🌟 QR MENÜ KAMPANYA POP-UP (DENEDİNİZ Mİ?) AYARLARI KARTI
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                border = BorderStroke(1.5.dp, if (isPopupActive) WarmGold else ForestGreen.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Header & Active/Passive Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(if (isPopupActive) WarmGold else Slate100, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🌟", fontSize = 18.sp)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "QR Menü Kampanya Pop-up",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = ForestGreen
+                                )
+                                Text(
+                                    text = if (isPopupActive) "🟢 Menüde Aktif & Gösteriliyor" else "⚪ Kapalı / Pasif",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isPopupActive) SuccessGreen else Slate500
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isPopupActive,
+                            onCheckedChange = { isPopupActive = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ForestGreen,
+                                checkedTrackColor = WarmGold,
+                                uncheckedThumbColor = Slate500,
+                                uncheckedTrackColor = Slate100
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Müşteriler masadaki QR menüyü okutup açtığında karşılarına çıkacak özel tanıtım kartını özelleştirin.",
+                        fontSize = 12.sp,
+                        color = Slate500,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 1. Image Preview & Upload
+                    Text("Pop-up Ürün Görseli:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF16241D))
+                            .clickable { imagePickerLauncher.launch("image/*") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val currentImgUrl = existingCampaign?.imageUrl
+                        if (selectedImageUri != null) {
+                            AsyncImage(
+                                model = selectedImageUri,
+                                contentDescription = "Seçilen Görsel",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (!currentImgUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = currentImgUrl,
+                                contentDescription = "Mevcut Görsel",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = WarmGold, modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Görsel Yüklemek İçin Dokunun 📷", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        // Badge on image preview
+                        Surface(
+                            color = ForestGreen.copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                        ) {
+                            Text(
+                                text = "Değiştir 📷",
+                                color = WarmGold,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 2. Badge & Title
+                    OutlinedTextField(
+                        value = popupBadge,
+                        onValueChange = { popupBadge = it },
+                        label = { Text("Pop-up Rozeti (Üst Başlık)") },
+                        placeholder = { Text("Örn: DENEDİNİZ Mİ? 🌟, GÜNÜN SPESİYALİ") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = popupTitle,
+                        onValueChange = { popupTitle = it },
+                        label = { Text("Ürün / Kampanya Başlığı") },
+                        placeholder = { Text("Örn: San Sebastian Cheesecake & Belçika Çikolatası") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 3. Description
+                    OutlinedTextField(
+                        value = popupDesc,
+                        onValueChange = { popupDesc = it },
+                        label = { Text("Açıklama / Davet Metni") },
+                        placeholder = { Text("Örn: Özel Belçika çikolatası eritilerek taptaze hazırlanan enfes lezzeti denediniz mi?") },
+                        maxLines = 3,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 4. Price & Button Text Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = popupPrice,
+                            onValueChange = { popupPrice = it },
+                            label = { Text("Fiyat / İndirim") },
+                            placeholder = { Text("Örn: ₺160,00") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = popupButtonText,
+                            onValueChange = { popupButtonText = it },
+                            label = { Text("Buton Metni") },
+                            placeholder = { Text("Örn: Hemen İncele ✨") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 5. Target Menu Item Selector (Dropdown)
+                    Text("Butona Basılınca Açılacak Menü Ürünü:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val selectedItem = menuItems.find { it.id == selectedTargetItemId }
+                    ExposedDropdownMenuBox(
+                        expanded = isTargetMenuDropdownExpanded,
+                        onExpandedChange = { isTargetMenuDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedItem?.name ?: if (selectedTargetItemId.isBlank()) "Genel Menüye Yönlendir" else "Seçili Ürün",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isTargetMenuDropdownExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isTargetMenuDropdownExpanded,
+                            onDismissRequest = { isTargetMenuDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Genel Menü / Özel Ürün Yok") },
+                                onClick = {
+                                    selectedTargetItemId = ""
+                                    isTargetMenuDropdownExpanded = false
+                                }
+                            )
+                            menuItems.forEach { mItem ->
+                                DropdownMenuItem(
+                                    text = { Text("${mItem.name} (₺${"%.2f".format(mItem.price)})") },
+                                    onClick = {
+                                        selectedTargetItemId = mItem.id
+                                        if (popupTitle.isBlank()) popupTitle = mItem.name
+                                        if (popupPrice.isBlank()) popupPrice = "₺${"%.2f".format(mItem.price)}"
+                                        isTargetMenuDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Save Button
+                    Button(
+                        onClick = {
+                            val newCampaign = PopupCampaign(
+                                isActive = isPopupActive,
+                                badge = popupBadge.ifBlank { "DENEDİNİZ Mİ? 🌟" },
+                                title = popupTitle.trim(),
+                                description = popupDesc.trim(),
+                                imageUrl = existingCampaign?.imageUrl ?: "",
+                                priceText = popupPrice.trim(),
+                                buttonText = popupButtonText.ifBlank { "Hemen Keşfet ✨" },
+                                targetMenuItemId = selectedTargetItemId,
+                                updatedAt = System.currentTimeMillis()
+                            )
+
+                            viewModel.savePopupCampaign(
+                                campaign = newCampaign,
+                                imageUri = selectedImageUri,
+                                onComplete = {
+                                    selectedImageUri = null
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, tint = WarmGold)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isPopupActive) "Pop-up Kampanyasını Kaydet & Yayına Al 🚀" else "Ayarları Kaydet (Pop-up Pasif)",
+                            fontWeight = FontWeight.Bold,
+                            color = WarmGold
+                        )
+                    }
+                }
+            }
+
             // Restaurant Info Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -228,7 +522,6 @@ fun SettingsScreen(
                 }
             }
 
-
             // Quick Tools & Testing
             Text("Test & Ses Araçları", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
 
@@ -278,7 +571,6 @@ fun SettingsScreen(
                 Text("Oturumu Kapat", fontWeight = FontWeight.Bold)
             }
 
-            // Generous bottom spacer so content is never cut off by navigation bar
             Spacer(modifier = Modifier.height(100.dp))
         }
     }

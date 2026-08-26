@@ -18,7 +18,21 @@ data class Restaurant(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val enforceGeoFence: Boolean = false,
+    val popupCampaign: PopupCampaign? = null,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+data class PopupCampaign(
+    @get:PropertyName("isActive") @set:PropertyName("isActive")
+    var isActive: Boolean = false,
+    val badge: String = "DENEDİNİZ Mİ? 🌟",
+    val title: String = "",
+    val description: String = "",
+    val imageUrl: String = "",
+    val priceText: String = "",
+    val buttonText: String = "Hemen İncele ✨",
+    val targetMenuItemId: String = "",
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 data class Category(

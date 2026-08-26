@@ -225,9 +225,30 @@
       </div>
     </div>
 
+    <!-- Promo / Campaign Pop-up Modal (Denediniz mi? 🌟) -->
+    <div class="promo-modal-overlay" id="promoModalOverlay" style="display: none;">
+      <div class="promo-modal-card">
+        <button class="promo-modal-close" id="btnClosePromoModal" aria-label="Kapat">✕</button>
+        <div class="promo-modal-img-wrap" id="promoImgWrap">
+          <img id="promoImg" src="" alt="Kampanya Görseli">
+          <div class="promo-badge" id="promoBadge">DENEDİNİZ Mİ? 🌟</div>
+        </div>
+        <div class="promo-modal-body">
+          <h3 class="promo-title" id="promoTitle">Özel Lezzet</h3>
+          <p class="promo-desc" id="promoDesc">Sade.C özel reçetesiyle hazırlanan eşsiz tat.</p>
+          <div class="promo-price-row" id="promoPriceRow" style="display: none;">
+            <span class="promo-price" id="promoPrice">₺0,00</span>
+          </div>
+          <button class="promo-action-btn" id="btnPromoAction">
+            <span id="promoBtnText">Hemen Keşfet ✨</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="firebase-config.js"></script>
-  <script src="app.js?v=2.1"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
 </html>

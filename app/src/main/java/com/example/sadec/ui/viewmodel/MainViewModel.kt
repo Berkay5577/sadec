@@ -382,7 +382,7 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    // --- RESTAURANT URL ACTIONS ---
+    // --- RESTAURANT URL & POPUP CAMPAIGN ACTIONS ---
     fun updateWebMenuUrl(url: String) {
         viewModelScope.launch {
             val res = firestoreRepository.updateRestaurantWebMenuUrl(_restaurantId.value, url)
@@ -391,6 +391,34 @@ class MainViewModel @JvmOverloads constructor(
                 _uiMessage.emit("Web Menü linki başarıyla kaydedildi!")
             }.onFailure {
                 _uiMessage.emit("Güncellenemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun savePopupCampaign(
+        campaign: PopupCampaign,
+        imageUri: Uri? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            var finalCampaign = campaign
+            if (imageUri != null) {
+                _uiMessage.emit("Kampanya görseli yükleniyor... ⏳")
+                val uploadRes = storageRepository.uploadCampaignImage(_restaurantId.value, imageUri, campaign.imageUrl)
+                uploadRes.onSuccess { url ->
+                    finalCampaign = finalCampaign.copy(imageUrl = url)
+                }.onFailure {
+                    _uiMessage.emit("Görsel yüklenemedi: ${it.localizedMessage}")
+                    return@launch
+                }
+            }
+
+            val res = firestoreRepository.savePopupCampaign(_restaurantId.value, finalCampaign)
+            res.onSuccess {
+                _uiMessage.emit("Pop-up kampanyası güncellendi ve yayına alındı! 🌟✨")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Kampanya kaydedilemedi: ${it.localizedMessage}")
             }
         }
     }
