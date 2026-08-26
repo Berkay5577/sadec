@@ -15,6 +15,29 @@
 </head>
 <body>
   <div class="container">
+    
+    <!-- Security Lock Screen (Appears when someone opens the link without scanning physical QR) -->
+    <div id="securityBlockView" style="display: none;">
+      <div class="security-card">
+        <div class="security-icon-wrap">
+          🔒
+        </div>
+        <h2>Masada QR Okutun</h2>
+        <p class="security-desc">
+          Bu sipariş menüsü güvenlik gereği yalnızca <b>Sade.C Gerze</b> masalarında bulunan orijinal QR kod kamerayla okutulduğunda açılır.
+        </p>
+        <div class="security-tip">
+          <span>⚠️</span>
+          <span>Bağlantı kopyalama veya uzaktan sipariş verme koruma altındadır.</span>
+        </div>
+        <div style="margin-top: 24px; padding: 16px; background: #fdfaf6; border-radius: 12px; border: 1px dashed #D4A96A;">
+          <img src="logo.png" alt="Sade C Logo" style="width: 60px; margin-bottom: 8px;">
+          <h4 style="color: #2C1A14; font-size: 0.95rem;">Sade.C Kahve Gerze</h4>
+          <p style="color: #64748b; font-size: 0.8rem; margin-top: 4px;">Masanızdaki QR kodu telefonunuzun kamerasıyla okutarak siparişinizi hemen iletebilirsiniz.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Menu View -->
     <div id="menuView">
       <!-- App Header -->
