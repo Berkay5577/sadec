@@ -2,14 +2,18 @@ package com.example.sadec.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val OrangePrimary = Color(0xFFFF5722)
-val OrangeDark = Color(0xFFE64A19)
-val OrangeLight = Color(0xFFFFCCBC)
-
-// Sade.C Brand Coffee Colors
-val DarkCoffee = Color(0xFF2C1A14)
+// Sade.C Brand Botanical Green & Coffee Palette
+val ForestGreen = Color(0xFF1E3A2F)
+val SageGreen = Color(0xFF2E5343)
+val SoftMintGreen = Color(0xFFEBF3EE)
+val DeepEspresso = Color(0xFF1A1412)
+val DarkCoffee = Color(0xFF1E3A2F) // Set primary dark to Forest Green
 val WarmGold = Color(0xFFD4A96A)
-val CreamLight = Color(0xFFFBF6EE)
+val CreamLight = Color(0xFFFBF8F3)
+
+val OrangePrimary = ForestGreen
+val OrangeDark = SageGreen
+val OrangeLight = SoftMintGreen
 
 val Slate900 = Color(0xFF0F172A)
 val Slate800 = Color(0xFF1E293B)

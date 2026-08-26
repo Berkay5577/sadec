@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Sade.C Kahve Gerze — Menü</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
   
   <!-- Firebase SDKs via CDN -->
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
@@ -49,7 +49,7 @@
             </div>
             <div>
               <h1 class="brand-title" id="restName">Sade.C</h1>
-              <span class="brand-subtitle">KAHVE • GERZE</span>
+              <span class="brand-subtitle">KAHVENİN EN SAF HALİ • GERZE</span>
             </div>
           </div>
           <div class="table-pill" id="tableBadge">
@@ -60,23 +60,39 @@
         <!-- Search Bar -->
         <div class="search-wrap">
           <span class="search-icon">🔍</span>
-          <input type="text" id="searchInput" class="search-input" placeholder="Menüde ara...">
+          <input type="text" id="searchInput" class="search-input" placeholder="Kahve, tatlı, sandviç veya içecek ara...">
         </div>
       </header>
 
-      <!-- Category Filter Tabs -->
-      <nav class="category-tabs" id="categoryNav" style="display: none;">
-        <button class="cat-pill active" data-category="all">Tümü</button>
-      </nav>
-
-      <!-- Menu Items Feed -->
-      <main class="menu-feed" id="menuSection">
+      <!-- 1. CATEGORY CARDS LANDING (Alt alta blurlu fotoğraflı kartlar) -->
+      <section id="categoryLandingView" class="category-cards-container">
         <div id="loadingIndicator" class="loading-state">
           <div class="spinner"></div>
-          <span>Menü yükleniyor...</span>
+          <span>Sade.C Menüsü Yükleniyor...</span>
         </div>
-        <div id="menuItemsContainer"></div>
-      </main>
+        <div id="categoryCardsList" class="category-cards-list"></div>
+      </section>
+
+      <!-- 2. CATEGORY ITEMS VIEW (Bir kategoriye tıklandığında veya aramada açılır) -->
+      <section id="categoryItemsView" class="category-items-view" style="display: none;">
+        <!-- Top Back Navigation -->
+        <div class="items-view-header">
+          <button class="back-pill-btn" id="btnBackToCategories">
+            ← Tüm Kategoriler
+          </button>
+          <span class="active-category-title" id="activeCategoryHeaderTitle">Kategori</span>
+        </div>
+
+        <!-- Category Horizontal Filter Tabs -->
+        <nav class="category-tabs" id="categoryNav">
+          <button class="cat-pill active" data-category="all">Tümü</button>
+        </nav>
+
+        <!-- Menu Items Feed -->
+        <main class="menu-feed" id="menuSection">
+          <div id="menuItemsContainer"></div>
+        </main>
+      </section>
 
       <!-- Minimal Floating Cart Bar -->
       <div class="cart-pill-bar" id="cartFloatingBar" style="display: none;">
@@ -125,7 +141,7 @@
 
         <!-- Tracking Summary -->
         <div class="tracking-summary">
-          <h4 class="summary-heading">Sipariş Detayı</h4>
+          <h4 class="summary-heading">Sipariş Özeti</h4>
           <div id="trackItemsList" class="track-items-list"></div>
           <div class="summary-total-row">
             <span>Toplam Tutar</span>
@@ -149,8 +165,8 @@
           <div class="modal-img-wrap" id="modalImgContainer">
             <img id="modalProductImg" src="" alt="Ürün" class="modal-img">
           </div>
-          <h3 id="modalProductTitle" class="modal-product-title">Ürün</h3>
-          <p id="modalProductDesc" class="modal-product-desc">Açıklama</p>
+          <h3 id="modalProductTitle" class="modal-product-title">Ürün Adı</h3>
+          <p id="modalProductDesc" class="modal-product-desc">İçerik açıklaması</p>
           <div id="modalAllergens" class="modal-allergens"></div>
 
           <div class="modal-price-qty-row">
@@ -162,7 +178,7 @@
             </div>
           </div>
 
-          <textarea id="modalProductNote" class="minimal-textarea" rows="2" placeholder="Özel isteğiniz var mı? (Örn: Az şekerli, laktozsuz süt vb.)"></textarea>
+          <textarea id="modalProductNote" class="minimal-textarea" rows="2" placeholder="Özel isteğiniz var mı? (Örn: Az şekerli, laktozsuz süt, sıcak vb.)"></textarea>
 
           <button class="btn-minimal-primary" id="btnConfirmAddToCart">
             Sepete Ekle • <span id="modalBtnTotal">₺0,00</span>
@@ -190,7 +206,7 @@
 
         <div class="cart-items-box" id="cartModalItems"></div>
 
-        <textarea id="cartOrderNote" class="minimal-textarea" rows="2" placeholder="Barista ve servis için notunuz (isteğe bağlı)..."></textarea>
+        <textarea id="cartOrderNote" class="minimal-textarea" rows="2" placeholder="Garson ve Barista için notunuz (isteğe bağlı)..."></textarea>
 
         <div class="cart-total-line">
           <span>Toplam Tutar</span>
@@ -206,6 +222,6 @@
   </div>
 
   <script src="firebase-config.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=2.1"></script>
 </body>
 </html>

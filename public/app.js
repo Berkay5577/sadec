@@ -9,13 +9,13 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 
 auth.signInAnonymously().catch(err => {
-  console.log("Anonymous auth skipped:", err.message);
+  console.log("Anonymous sign-in:", err.message);
 });
 
 // App State
 let currentRestId = "sadec-gerze";
-let currentTableId = "table-1";
-let currentTableLabel = "Masa 1";
+let currentTableId = "table-bar";
+let currentTableLabel = "BAR";
 let isQrAuthorized = false;
 let clientSecurityKey = "";
 
@@ -28,13 +28,67 @@ let selectedProduct = null;
 let currentModalQty = 1;
 let currentTrackingOrderId = null;
 let orderTrackingUnsubscribe = null;
+let currentView = "categories"; // 'categories' or 'items'
+
+// Default fallback images for categories if not specified
+const categoryDefaultImages = {
+  'sıcak': 'images/cat_hot.jpg',
+  'soğuk': 'images/cat_cold.jpg',
+  'spesiyal': 'images/cat_specials.jpg',
+  'sandviç': 'images/cat_specials.jpg',
+  'atıştırmalık': 'images/cat_snacks.jpg',
+  'tost': 'images/cat_snacks.jpg',
+  'tatlı': 'images/cat_desserts.jpg',
+  'pasta': 'images/cat_desserts.jpg',
+  'default': 'images/cat_hot.jpg'
+};
+
+function getCategoryImageUrl(cat) {
+  if (cat.imageUrl && cat.imageUrl.trim() !== "") {
+    return cat.imageUrl;
+  }
+  const lower = (cat.name || "").toLowerCase();
+  for (const [key, val] of Object.entries(categoryDefaultImages)) {
+    if (key !== 'default' && lower.includes(key)) return val;
+  }
+  return categoryDefaultImages['default'];
+}
+
+// Allergen Letter Mapping & Badge Generator
+function formatAllergensHtml(allergens) {
+  if (!allergens || allergens.length === 0) return "";
+
+  const badges = allergens.map(allergen => {
+    const lower = allergen.toLowerCase();
+    let letter = allergen.charAt(0).toUpperCase();
+    if (lower.includes("gluten")) letter = "G";
+    else if (lower.includes("süt") || lower.includes("laktoz")) letter = "S";
+    else if (lower.includes("yumurta")) letter = "Y";
+    else if (lower.includes("kafein") || lower.includes("kahve")) letter = "K";
+    else if (lower.includes("fındık") || lower.includes("fıstık") || lower.includes("kuruyemiş") || lower.includes("ceviz")) letter = "F";
+    else if (lower.includes("soya")) letter = "Sy";
+
+    return `<span class="allergen-letter-tag"><span class="allergen-letter-icon">${letter}</span> ${allergen}</span>`;
+  });
+
+  return `<div class="minimal-allergens">${badges.join("")}</div>`;
+}
 
 // DOM Elements
 const securityBlockViewEl = document.getElementById("securityBlockView");
 const menuViewEl = document.getElementById("menuView");
 const restNameEl = document.getElementById("restName");
+const tableBadgeEl = document.getElementById("tableBadge");
 const tableLabelTextEl = document.getElementById("tableLabelText");
+
+const categoryLandingViewEl = document.getElementById("categoryLandingView");
+const categoryCardsListEl = document.getElementById("categoryCardsList");
+const categoryItemsViewEl = document.getElementById("categoryItemsView");
+const btnBackToCategoriesEl = document.getElementById("btnBackToCategories");
+const activeCategoryHeaderTitleEl = document.getElementById("activeCategoryHeaderTitle");
+
 const categoryNavEl = document.getElementById("categoryNav");
+const menuSectionEl = document.getElementById("menuSection");
 const menuItemsContainerEl = document.getElementById("menuItemsContainer");
 const loadingIndicatorEl = document.getElementById("loadingIndicator");
 const searchInputEl = document.getElementById("searchInput");
@@ -45,7 +99,6 @@ const cartBarTotalEl = document.getElementById("cartBarTotal");
 
 const productModalOverlay = document.getElementById("productModalOverlay");
 const btnCloseProductModal = document.getElementById("btnCloseProductModal");
-const modalImgContainer = document.getElementById("modalImgContainer");
 const modalProductImg = document.getElementById("modalProductImg");
 const modalProductTitle = document.getElementById("modalProductTitle");
 const modalProductDesc = document.getElementById("modalProductDesc");
@@ -65,7 +118,6 @@ const cartModalTotalPrice = document.getElementById("cartModalTotalPrice");
 const cartModalTable = document.getElementById("cartModalTable");
 const cartOrderNote = document.getElementById("cartOrderNote");
 const btnSubmitOrder = document.getElementById("btnSubmitOrder");
-const cartCustomerNameInput = document.getElementById("cartCustomerName");
 
 const trackingViewEl = document.getElementById("trackingView");
 const trackTableTextEl = document.getElementById("trackTableText");
@@ -74,7 +126,6 @@ const trackStatusBadgeEl = document.getElementById("trackStatusBadge");
 const trackItemsListEl = document.getElementById("trackItemsList");
 const trackTotalAmountEl = document.getElementById("trackTotalAmount");
 const btnNewOrderEl = document.getElementById("btnNewOrder");
-const trackCustomerNameTextEl = document.getElementById("trackCustomerNameText");
 const stepPending = document.getElementById("stepPending");
 const stepPreparing = document.getElementById("stepPreparing");
 const stepReady = document.getElementById("stepReady");
@@ -83,6 +134,44 @@ const stepDelivered = document.getElementById("stepDelivered");
 function formatCurrency(amount) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 }
+
+// ========== VIEW TRANSITIONS ==========
+function showCategoryLanding() {
+  currentView = "categories";
+  categoryLandingViewEl.style.display = "block";
+  categoryItemsViewEl.style.display = "none";
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showMenuItems(categoryId, categoryTitle) {
+  currentView = "items";
+  activeCategory = categoryId || "all";
+  categoryLandingViewEl.style.display = "none";
+  categoryItemsViewEl.style.display = "block";
+
+  if (categoryTitle) {
+    activeCategoryHeaderTitleEl.textContent = categoryTitle;
+  } else if (categoryId === "all") {
+    activeCategoryHeaderTitleEl.textContent = "Tüm Ürünler";
+  } else {
+    const found = categories.find(c => c.id === categoryId);
+    activeCategoryHeaderTitleEl.textContent = found ? found.name : "Kategori";
+  }
+
+  // Update tabs
+  document.querySelectorAll(".cat-pill").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.category === activeCategory);
+  });
+
+  renderMenuItems();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+btnBackToCategoriesEl.addEventListener("click", () => {
+  searchInputEl.value = "";
+  searchQuery = "";
+  showCategoryLanding();
+});
 
 // ========== URL PARAMS & SECURITY ==========
 function initUrlParams() {
@@ -152,7 +241,7 @@ function validateSecurity() {
         }
       }
     }, err => {
-      console.log("Security check error:", err.message);
+      console.log("Security check:", err.message);
       showMenuViewMain();
     });
 }
@@ -175,13 +264,13 @@ function listenRestaurantData() {
       const data = doc.data();
       if (data.name) {
         restNameEl.textContent = data.name;
-        document.title = `${data.name} — Menü`;
+        document.title = `${data.name} — QR Menü`;
       }
     }
-  }, err => console.log("Restaurant listen:", err.message));
+  }, err => console.log("Restaurant listen error:", err.message));
 }
 
-// ========== CATEGORIES (Real-time) ==========
+// ========== CATEGORIES ==========
 function listenCategories() {
   db.collection("restaurants").doc(currentRestId).collection("categories")
     .orderBy("sortOrder", "asc")
@@ -190,26 +279,64 @@ function listenCategories() {
       snapshot.forEach(doc => {
         categories.push({ id: doc.id, ...doc.data() });
       });
+
+      renderCategoryLandingCards();
       renderCategoryTabs();
-      renderMenuItems();
     }, err => {
-      console.log("Category listen error:", err.message);
+      console.log("Category listen, fallback without index:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("categories")
         .onSnapshot(snap => {
           categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          renderCategoryLandingCards();
           renderCategoryTabs();
-          renderMenuItems();
         });
     });
 }
 
-function renderCategoryTabs() {
+function renderCategoryLandingCards() {
+  if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
+
   if (categories.length === 0) {
-    categoryNavEl.style.display = "none";
+    categoryCardsListEl.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size: 2rem; margin-bottom: 8px;">☕</div>
+        <p>Henüz kategori eklenmedi.</p>
+      </div>
+    `;
     return;
   }
 
-  categoryNavEl.style.display = "flex";
+  let html = "";
+  categories.forEach(cat => {
+    const bgUrl = getCategoryImageUrl(cat);
+    const count = menuItems.filter(i => i.categoryId === cat.id && i.isAvailable !== false).length;
+
+    html += `
+      <div class="category-card-stacked" data-category-id="${cat.id}" data-category-name="${cat.name}">
+        <div class="category-card-bg" style="background-image: url('${bgUrl}')"></div>
+        <div class="category-card-overlay">
+          <h2 class="category-card-title">${cat.name}</h2>
+          <div class="category-card-meta">
+            <span class="category-card-badge">${count > 0 ? `${count} Çeşit Lezzet` : 'İncele'}</span>
+            <span class="category-card-arrow">Keşfet →</span>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  categoryCardsListEl.innerHTML = html;
+
+  document.querySelectorAll(".category-card-stacked").forEach(card => {
+    card.addEventListener("click", () => {
+      const catId = card.dataset.categoryId;
+      const catName = card.dataset.categoryName;
+      showMenuItems(catId, catName);
+    });
+  });
+}
+
+function renderCategoryTabs() {
   categoryNavEl.innerHTML = `<button class="cat-pill ${activeCategory === 'all' ? 'active' : ''}" data-category="all">Tümü</button>`;
 
   categories.forEach(cat => {
@@ -221,6 +348,7 @@ function renderCategoryTabs() {
       activeCategory = cat.id;
       document.querySelectorAll(".cat-pill").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+      activeCategoryHeaderTitleEl.textContent = cat.name;
       renderMenuItems();
     });
     categoryNavEl.appendChild(btn);
@@ -230,11 +358,12 @@ function renderCategoryTabs() {
     activeCategory = "all";
     document.querySelectorAll(".cat-pill").forEach(b => b.classList.remove("active"));
     e.target.classList.add("active");
+    activeCategoryHeaderTitleEl.textContent = "Tüm Ürünler";
     renderMenuItems();
   });
 }
 
-// ========== MENU ITEMS (Real-time) ==========
+// ========== MENU ITEMS ==========
 function listenMenuItems() {
   db.collection("restaurants").doc(currentRestId).collection("menuItems")
     .orderBy("sortOrder", "asc")
@@ -243,15 +372,22 @@ function listenMenuItems() {
       snapshot.forEach(doc => {
         menuItems.push({ id: doc.id, ...doc.data() });
       });
+
       if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
-      renderMenuItems();
+      renderCategoryLandingCards();
+      if (currentView === "items") {
+        renderMenuItems();
+      }
     }, err => {
-      console.log("Menu items error:", err.message);
+      console.log("Menu items listen, fallback without index:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("menuItems")
         .onSnapshot(snap => {
           menuItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           if (loadingIndicatorEl) loadingIndicatorEl.style.display = "none";
-          renderMenuItems();
+          renderCategoryLandingCards();
+          if (currentView === "items") {
+            renderMenuItems();
+          }
         });
     });
 }
@@ -266,7 +402,7 @@ function renderMenuItems() {
   if (searchQuery.trim() !== "") {
     const q = searchQuery.toLowerCase().trim();
     filtered = filtered.filter(item => 
-      item.name.toLowerCase().includes(q) || 
+      (item.name && item.name.toLowerCase().includes(q)) || 
       (item.description && item.description.toLowerCase().includes(q))
     );
   }
@@ -274,41 +410,39 @@ function renderMenuItems() {
   if (filtered.length === 0) {
     menuItemsContainerEl.innerHTML = `
       <div class="empty-state">
-        <div style="font-size: 2.2rem; margin-bottom: 8px;">☕</div>
-        <p style="font-size: 0.95rem; font-weight: 500;">Henüz ürün bulunmuyor</p>
-        <small style="color: #94A39B;">Eklenen lezzetler anlık olarak burada görüntülenecektir.</small>
+        <div style="font-size: 2rem; margin-bottom: 8px;">☕</div>
+        <p>Aradığınız kriterde ürün bulunamadı.</p>
       </div>
     `;
     return;
   }
 
-  // If "all" is active and categories exist, group by category
-  if (activeCategory === "all" && categories.length > 0 && searchQuery.trim() === "") {
+  if (activeCategory === "all" && searchQuery.trim() === "") {
     let html = "";
     categories.forEach(cat => {
       const catItems = filtered.filter(i => i.categoryId === cat.id);
       if (catItems.length > 0) {
         html += `<h3 class="category-header-title">${cat.name}</h3>`;
         catItems.forEach(item => {
-          html += createMinimalProductCard(item);
+          html += createProductItemHtml(item);
         });
       }
     });
 
-    const otherItems = filtered.filter(i => !categories.some(c => c.id === i.categoryId));
-    if (otherItems.length > 0) {
+    const unassigned = filtered.filter(i => !categories.some(c => c.id === i.categoryId));
+    if (unassigned.length > 0) {
       html += `<h3 class="category-header-title">Diğer Lezzetler</h3>`;
-      otherItems.forEach(item => {
-        html += createMinimalProductCard(item);
+      unassigned.forEach(item => {
+        html += createProductItemHtml(item);
       });
     }
 
     menuItemsContainerEl.innerHTML = html;
   } else {
-    menuItemsContainerEl.innerHTML = filtered.map(item => createMinimalProductCard(item)).join("");
+    menuItemsContainerEl.innerHTML = filtered.map(item => createProductItemHtml(item)).join("");
   }
 
-  // Click handler to open product customization bottom sheet
+  // Click handler to open product modal
   document.querySelectorAll(".minimal-product-card").forEach(card => {
     card.addEventListener("click", () => {
       const itemId = card.dataset.id;
@@ -318,22 +452,20 @@ function renderMenuItems() {
   });
 }
 
-function createMinimalProductCard(item) {
-  const hasImage = Boolean(item.imageUrl && item.imageUrl.trim() !== "");
-  const allergensHtml = (item.allergens && item.allergens.length > 0)
-    ? `<div class="minimal-allergens">${item.allergens.map(a => `<span class="allergen-chip">${a}</span>`).join("")}</div>`
-    : "";
+function createProductItemHtml(item) {
+  const imgUrl = item.imageUrl || "images/cat_hot.jpg";
+  const allergensHtml = formatAllergensHtml(item.allergens);
 
   return `
     <div class="minimal-product-card" data-id="${item.id}">
       <div class="minimal-product-info">
         <h4 class="minimal-product-title">${item.name}</h4>
-        ${item.description ? `<p class="minimal-product-desc">${item.description}</p>` : ''}
+        <p class="minimal-product-desc">${item.description || ''}</p>
         ${allergensHtml}
         <span class="minimal-product-price">${formatCurrency(item.price)}</span>
       </div>
       <div class="minimal-product-media">
-        <img src="${hasImage ? item.imageUrl : 'logo.png'}" alt="${item.name}" onerror="this.src='logo.png'">
+        <img src="${imgUrl}" alt="${item.name}" onerror="this.src='logo.png'">
         <div class="minimal-add-btn">+</div>
       </div>
     </div>
@@ -343,7 +475,11 @@ function createMinimalProductCard(item) {
 // ========== SEARCH ==========
 searchInputEl.addEventListener("input", (e) => {
   searchQuery = e.target.value;
-  renderMenuItems();
+  if (searchQuery.trim() !== "") {
+    showMenuItems("all", `Arama: "${searchQuery}"`);
+  } else if (currentView === "items" && searchQuery.trim() === "") {
+    renderMenuItems();
+  }
 });
 
 // ========== PRODUCT MODAL ==========
@@ -354,21 +490,11 @@ function openProductModal(product) {
   modalProductNote.value = "";
 
   modalProductTitle.textContent = product.name;
-  modalProductDesc.textContent = product.description || "Özel Sade.C reçetesiyle taptaze hazırlanır.";
+  modalProductDesc.textContent = product.description || "Özel reçetesiyle taptaze hazırlanır.";
   modalProductPrice.textContent = formatCurrency(product.price);
+  modalProductImg.src = product.imageUrl || "images/cat_hot.jpg";
 
-  if (product.imageUrl && product.imageUrl.trim() !== "") {
-    modalImgContainer.style.display = "block";
-    modalProductImg.src = product.imageUrl;
-  } else {
-    modalImgContainer.style.display = "none";
-  }
-
-  if (product.allergens && product.allergens.length > 0) {
-    modalAllergens.innerHTML = product.allergens.map(a => `<span class="allergen-chip">⚠️ ${a}</span>`).join("");
-  } else {
-    modalAllergens.innerHTML = "";
-  }
+  modalAllergens.innerHTML = formatAllergensHtml(product.allergens);
 
   updateModalTotal();
   productModalOverlay.classList.add("active");
@@ -438,7 +564,7 @@ function updateCartUI() {
   }
 
   if (cart.length === 0) {
-    cartModalItems.innerHTML = `<p style="text-align: center; color: #94A39B; padding: 24px 0;">Sepetiniz boş.</p>`;
+    cartModalItems.innerHTML = `<p style="text-align: center; color: #94A39B; padding: 24px;">Sepetiniz henüz boş.</p>`;
     btnSubmitOrder.disabled = true;
   } else {
     btnSubmitOrder.disabled = false;
@@ -487,10 +613,12 @@ cartModalOverlay.addEventListener("click", (e) => {
 btnSubmitOrder.addEventListener("click", async () => {
   if (cart.length === 0 || !isQrAuthorized) return;
 
-  const customerName = cartCustomerNameInput ? cartCustomerNameInput.value.trim() : "";
+  const customerNameInput = document.getElementById("cartCustomerName");
+  const customerName = customerNameInput ? customerNameInput.value.trim() : "";
+
   if (!customerName) {
-    alert("Lütfen siparişin kime getirileceğini belirtmek için adınızı giriniz 👤");
-    if (cartCustomerNameInput) cartCustomerNameInput.focus();
+    alert("Lütfen siparişinizi masanıza getirebilmemiz için adınızı yazınız 👤");
+    if (customerNameInput) customerNameInput.focus();
     return;
   }
 
@@ -542,12 +670,13 @@ function startOrderTracking(orderId, initialData) {
 
   trackOrderNoEl.textContent = `#${orderId.slice(-5).toUpperCase()}`;
   trackTableTextEl.textContent = initialData.tableLabel;
-  if (trackCustomerNameTextEl) trackCustomerNameTextEl.textContent = initialData.customerName || "Misafir";
+  const custNameEl = document.getElementById("trackCustomerNameText");
+  if (custNameEl) custNameEl.textContent = initialData.customerName || "Misafir";
   trackTotalAmountEl.textContent = formatCurrency(initialData.totalPrice);
 
   trackItemsListEl.innerHTML = initialData.items.map(i => `
-    <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 4px;">
-      <span>${i.quantity}x ${i.name} ${i.note ? `<small style="color: #D97706;">(${i.note})</small>` : ''}</span>
+    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.88rem;">
+      <span>${i.quantity}x ${i.name} ${i.note ? `<small style="color: var(--warning);">(${i.note})</small>` : ''}</span>
       <span>${formatCurrency(i.unitPrice * i.quantity)}</span>
     </div>
   `).join("");
@@ -600,12 +729,11 @@ function updateTrackingUI(status) {
 btnNewOrderEl.addEventListener("click", () => {
   trackingViewEl.style.display = "none";
   menuViewEl.style.display = "block";
+  showCategoryLanding();
 });
 
-// ========== START ==========
-window.addEventListener("DOMContentLoaded", () => {
-  initUrlParams();
-  listenRestaurantData();
-  listenCategories();
-  listenMenuItems();
-});
+// App Initialization
+initUrlParams();
+listenRestaurantData();
+listenCategories();
+listenMenuItems();

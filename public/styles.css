@@ -3,7 +3,7 @@
   --bg-canvas: #FAF8F5;
   --surface: #FFFFFF;
   --text-main: #182520;
-  --text-muted: #64756D;
+  --text-muted: #62756B;
   --text-light: #94A39B;
   --border: #E8EBE6;
   --border-light: #F0F2EE;
@@ -11,7 +11,7 @@
   --primary-green: #1E3A2F;
   --primary-hover: #152B23;
   --soft-sage: #EEF3F0;
-  --sage-accent: #3A6250;
+  --sage-accent: #2D5341;
   --gold: #C59F60;
   --gold-hover: #A88347;
   --gold-soft: #F9F5EE;
@@ -27,7 +27,8 @@
   --radius-lg: 20px;
   --radius-full: 9999px;
 
-  --shadow-subtle: 0 1px 3px rgba(24, 37, 32, 0.03), 0 4px 12px rgba(24, 37, 32, 0.02);
+  --shadow-subtle: 0 2px 8px rgba(24, 37, 32, 0.04);
+  --shadow-card: 0 4px 16px rgba(24, 37, 32, 0.08);
   --shadow-sheet: 0 -8px 30px rgba(24, 37, 32, 0.12);
   --shadow-floating: 0 8px 24px rgba(30, 58, 47, 0.22);
 }
@@ -70,7 +71,7 @@ body {
 }
 
 .app-layout {
-  max-width: 540px;
+  max-width: 520px;
   margin: 0 auto;
   min-height: 100vh;
   background: var(--surface);
@@ -142,7 +143,7 @@ body {
 .minimal-header {
   position: sticky;
   top: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
   z-index: 40;
   padding: 16px 20px 12px;
@@ -163,8 +164,8 @@ body {
 }
 
 .brand-logo-wrap {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--primary-green);
   display: flex;
@@ -174,14 +175,14 @@ body {
 }
 
 .brand-logo {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
 .brand-title {
   font-family: 'Playfair Display', serif;
-  font-size: 1.25rem;
+  font-size: 1.3rem;
   font-weight: 700;
   color: var(--primary-green);
   line-height: 1.1;
@@ -199,9 +200,9 @@ body {
 .table-pill {
   background: var(--soft-sage);
   color: var(--primary-green);
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-full);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 700;
   border: 1px solid rgba(30, 58, 47, 0.12);
 }
@@ -213,20 +214,20 @@ body {
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-light);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
 }
 
 .search-input {
   width: 100%;
-  padding: 9px 14px 9px 36px;
+  padding: 10px 14px 10px 38px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--bg-canvas);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   outline: none;
   color: var(--text-main);
   transition: all 0.2s ease;
@@ -238,7 +239,148 @@ body {
   box-shadow: 0 0 0 3px rgba(30, 58, 47, 0.08);
 }
 
-/* Category Tabs (Clean Minimal Pill Row) */
+/* ========================================================== */
+/* 1. CATEGORY STACKED CARDS (Alt Alta Blurlu Fotoğraflı Kartlar) */
+/* ========================================================== */
+.category-cards-container {
+  padding: 18px 20px 32px;
+}
+
+.category-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.category-card-stacked {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(30, 58, 47, 0.12);
+}
+
+.category-card-stacked:active {
+  transform: scale(0.98);
+}
+
+/* Background Image with Blur Effect */
+.category-card-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(2.5px) brightness(0.68);
+  transform: scale(1.08); /* avoid white blur edge */
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.category-card-stacked:hover .category-card-bg {
+  filter: blur(1.5px) brightness(0.75);
+  transform: scale(1.12);
+}
+
+/* Dark Gradient Vignette Overlay */
+.category-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(20, 35, 28, 0.25) 0%, rgba(14, 25, 20, 0.8) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px 22px;
+  z-index: 2;
+}
+
+.category-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  margin-bottom: 6px;
+}
+
+.category-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.category-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.category-card-arrow {
+  color: var(--gold);
+  font-size: 1.1rem;
+  font-weight: 700;
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.category-card-stacked:hover .category-card-arrow {
+  transform: translateX(4px);
+}
+
+/* ========================================================== */
+/* 2. CATEGORY ITEMS VIEW & ALLERGEN LETTERS */
+/* ========================================================== */
+.items-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.back-pill-btn {
+  background: var(--soft-sage);
+  color: var(--primary-green);
+  border: 1px solid rgba(30, 58, 47, 0.15);
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.back-pill-btn:active {
+  transform: scale(0.96);
+  background: var(--primary-green);
+  color: #FFFFFF;
+}
+
+.active-category-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--primary-green);
+}
+
+/* Category Horizontal Tabs */
 .category-tabs {
   display: flex;
   gap: 6px;
@@ -279,10 +421,10 @@ body {
 
 .category-header-title {
   font-family: 'Playfair Display', serif;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--primary-green);
-  margin: 20px 0 10px;
+  margin: 20px 0 12px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-light);
 }
@@ -308,7 +450,7 @@ body {
 }
 
 .minimal-product-title {
-  font-size: 0.98rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-main);
   margin-bottom: 3px;
@@ -325,24 +467,43 @@ body {
   margin-bottom: 6px;
 }
 
+/* Allergen Letter Badges (Harfli Alerjen Rozetleri) */
 .minimal-allergens {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 5px;
   margin-bottom: 6px;
 }
 
-.allergen-chip {
-  font-size: 0.7rem;
-  background: var(--soft-sage);
-  color: var(--sage-accent);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 500;
+.allergen-letter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  background: #FAF5EE;
+  color: #7A5B28;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 600;
+  border: 1px solid rgba(197, 159, 96, 0.25);
+}
+
+.allergen-letter-icon {
+  background: var(--gold);
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 0.65rem;
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .minimal-product-price {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--gold);
 }
@@ -350,12 +511,13 @@ body {
 /* Product Right: Thumbnail + Add Icon */
 .minimal-product-media {
   position: relative;
-  width: 80px;
-  height: 80px;
+  width: 82px;
+  height: 82px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--soft-sage);
   flex-shrink: 0;
+  border: 1px solid var(--border-light);
 }
 
 .minimal-product-media img {
@@ -379,7 +541,7 @@ body {
   justify-content: center;
   font-size: 1rem;
   font-weight: 700;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
 }
 
 /* Floating Cart Pill */
@@ -453,7 +615,7 @@ body {
 .modal-sheet {
   background: var(--surface);
   width: 100%;
-  max-width: 540px;
+  max-width: 520px;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 20px 22px 28px;
   max-height: 88vh;

@@ -215,7 +215,10 @@ fun AddEditProductScreen(
                 Switch(
                     checked = isAvailable,
                     onCheckedChange = { isAvailable = it },
-                    colors = SwitchDefaults.colors(checkedThumbColor = OrangePrimary)
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = ForestGreen
+                    )
                 )
             }
 
@@ -247,7 +250,7 @@ fun AddEditProductScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
                 enabled = !isSaving && name.isNotBlank()
             ) {
                 if (isSaving) {

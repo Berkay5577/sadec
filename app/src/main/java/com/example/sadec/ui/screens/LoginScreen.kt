@@ -1,23 +1,30 @@
 package com.example.sadec.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.sadec.ui.theme.DarkCoffee
+import com.example.sadec.R
+import com.example.sadec.ui.theme.ForestGreen
+import com.example.sadec.ui.theme.SageGreen
 import com.example.sadec.ui.theme.WarmGold
 import com.example.sadec.ui.viewmodel.MainViewModel
 
@@ -32,15 +39,26 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
+            .background(Color(0xFFF7FAF8)),
         contentAlignment = Alignment.Center
     ) {
+        // Subtle background watermark logo
+        Image(
+            painter = painterResource(id = R.drawable.sadec_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .size(380.dp)
+                .alpha(0.05f)
+                .align(Alignment.Center)
+        )
+
         Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -48,34 +66,38 @@ fun LoginScreen(
                     .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Logo Icon
+                // Sade.C Brand Logo Badge
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
-                        .background(DarkCoffee, RoundedCornerShape(20.dp)),
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(ForestGreen)
+                        .padding(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Restaurant,
-                        contentDescription = "Logo",
-                        tint = WarmGold,
-                        modifier = Modifier.size(38.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.sadec_logo),
+                        contentDescription = "Sade.C Logo",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Sade.C Dükkan Girişi",
+                    text = "Sade.C Kahve Gerze",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = DarkCoffee
+                    color = ForestGreen
                 )
 
                 Text(
-                    text = "Yönetici E-posta ve Şifreniz ile giriş yapın",
+                    text = "Dükkan Yönetim Paneli Girişi",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
+                    color = SageGreen,
+                    fontWeight = FontWeight.Medium
                 )
 
                 Spacer(modifier = Modifier.height(28.dp))
@@ -84,9 +106,9 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("E-posta Adresi") },
+                    label = { Text("Yönetici E-posta") },
                     placeholder = { Text("admin@sadec.com") },
-                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = ForestGreen) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
@@ -101,7 +123,7 @@ fun LoginScreen(
                     onValueChange = { password = it },
                     label = { Text("Şifre") },
                     placeholder = { Text("••••••••") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = ForestGreen) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     singleLine = true,
@@ -121,9 +143,9 @@ fun LoginScreen(
                     enabled = email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(54.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkCoffee)
+                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
                 ) {
                     Text(
                         text = "Giriş Yap",

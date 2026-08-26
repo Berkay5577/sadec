@@ -218,12 +218,26 @@ class MainViewModel @JvmOverloads constructor(
     }
 
     // --- CATEGORY ACTIONS ---
-    fun saveCategory(name: String, sortOrder: Int, categoryId: String = "") {
+    fun saveCategory(
+        name: String,
+        sortOrder: Int,
+        categoryId: String = "",
+        imageUrl: String = "",
+        imageUri: Uri? = null,
+        onComplete: () -> Unit = {}
+    ) {
         viewModelScope.launch {
-            val cat = Category(id = categoryId, name = name, sortOrder = sortOrder)
+            var finalImageUrl = imageUrl
+            if (imageUri != null) {
+                val uploadRes = storageRepository.uploadProductImage(_restaurantId.value, imageUri)
+                uploadRes.onSuccess { url -> finalImageUrl = url }
+            }
+            val cat = Category(id = categoryId, name = name, sortOrder = sortOrder, imageUrl = finalImageUrl)
             val res = firestoreRepository.saveCategory(_restaurantId.value, cat)
-            res.onSuccess { _uiMessage.emit("Kategori kaydedildi.") }
-                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
+            res.onSuccess {
+                _uiMessage.emit("Kategori kaydedildi.")
+                onComplete()
+            }.onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
         }
     }
 

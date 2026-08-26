@@ -220,6 +220,7 @@ fun CategoryDetailScreen(
     if (showEditCategoryDialog) {
         var editName by remember { mutableStateOf(currentCategory.name) }
         var editOrder by remember { mutableStateOf(currentCategory.sortOrder.toString()) }
+        var editImageUrl by remember { mutableStateOf(currentCategory.imageUrl) }
 
         AlertDialog(
             onDismissRequest = { showEditCategoryDialog = false },
@@ -240,6 +241,14 @@ fun CategoryDetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     )
+                    OutlinedTextField(
+                        value = editImageUrl,
+                        onValueChange = { editImageUrl = it },
+                        label = { Text("Kategori Görseli (URL veya dosya adı)") },
+                        placeholder = { Text("images/cat_hot.jpg") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
                 }
             },
             confirmButton = {
@@ -247,7 +256,12 @@ fun CategoryDetailScreen(
                     onClick = {
                         if (editName.isNotBlank()) {
                             val orderInt = editOrder.toIntOrNull() ?: currentCategory.sortOrder
-                            viewModel.saveCategory(editName.trim(), orderInt, currentCategory.id)
+                            viewModel.saveCategory(
+                                name = editName.trim(),
+                                sortOrder = orderInt,
+                                categoryId = currentCategory.id,
+                                imageUrl = editImageUrl.trim()
+                            )
                             showEditCategoryDialog = false
                         }
                     },

@@ -23,7 +23,8 @@ data class Restaurant(
 data class Category(
     @DocumentId val id: String = "",
     val name: String = "",
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val imageUrl: String = ""
 )
 
 data class MenuItem(
