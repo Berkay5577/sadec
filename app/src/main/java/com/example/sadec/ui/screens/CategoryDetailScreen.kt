@@ -109,12 +109,14 @@ fun CategoryDetailScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
-            contentPadding = PaddingValues(top = 10.dp, bottom = 90.dp)
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = padding.calculateTopPadding() + 10.dp,
+                bottom = 120.dp
+            )
         ) {
             // Category Info & Quick Settings Banner (Luxury Sade.C Botanical Card)
             item {

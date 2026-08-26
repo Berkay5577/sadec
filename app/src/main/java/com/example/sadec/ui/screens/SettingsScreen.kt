@@ -228,68 +228,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Web Menu Domain / URL Settings
-            Text("Web QR Menü Alan Adı (Vercel / Domain)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Vercel üzerinde açılan canlı web sitenizin adresini buraya yapıştırın. QR kodlar bu adresi kullanacaktır.",
-                        fontSize = 12.sp,
-                        color = Slate500
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = webUrlInput,
-                        onValueChange = { webUrlInput = it },
-                        label = { Text("Web Menü Linki") },
-                        placeholder = { Text("https://sadec.vercel.app") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                if (webUrlInput.isNotBlank()) {
-                                    viewModel.updateWebMenuUrl(webUrlInput.trim())
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
-                        ) {
-                            Text("Linki Kaydet", color = WarmGold, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = {
-                                val targetUrl = if (webUrlInput.startsWith("http")) webUrlInput else "https://$webUrlInput"
-                                val fullTestUrl = "$targetUrl/?restId=$restaurantId&table=table-bar"
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fullTestUrl))
-                                context.startActivity(browserIntent)
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen)
-                        ) {
-                            Text("Aç & Test Et 🌐", color = Color.White)
-                        }
-                    }
-                }
-            }
 
             // Quick Tools & Testing
             Text("Test & Ses Araçları", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)

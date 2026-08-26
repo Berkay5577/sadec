@@ -108,10 +108,10 @@ fun TableManagementScreen(
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
                     top = paddingValues.calculateTopPadding() + 8.dp,
                     bottom = 120.dp
                 ),
