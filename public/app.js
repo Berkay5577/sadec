@@ -510,6 +510,15 @@ cartModalOverlay.addEventListener("click", (e) => {
 btnSubmitOrder.addEventListener("click", async () => {
   if (cart.length === 0 || !isQrAuthorized) return;
 
+  const customerNameInput = document.getElementById("cartCustomerName");
+  const customerName = customerNameInput ? customerNameInput.value.trim() : "";
+
+  if (!customerName) {
+    alert("Lütfen siparişin kime teslim edileceğini belirtmek için adınızı yazınız 👤");
+    if (customerNameInput) customerNameInput.focus();
+    return;
+  }
+
   btnSubmitOrder.disabled = true;
   btnSubmitOrder.textContent = "Sipariş Gönderiliyor...";
 
@@ -519,6 +528,7 @@ btnSubmitOrder.addEventListener("click", async () => {
   const orderData = {
     tableId: currentTableId,
     tableLabel: currentTableLabel,
+    customerName: customerName,
     status: "pending",
     totalPrice: totalPrice,
     note: generalNote,
@@ -558,6 +568,8 @@ function startOrderTracking(orderId, initialData) {
 
   trackOrderNoEl.textContent = `#${orderId.slice(-5).toUpperCase()}`;
   trackTableTextEl.textContent = initialData.tableLabel;
+  const custNameEl = document.getElementById("trackCustomerNameText");
+  if (custNameEl) custNameEl.textContent = initialData.customerName || "Misafir";
   trackTotalAmountEl.textContent = formatCurrency(initialData.totalPrice);
 
   trackItemsListEl.innerHTML = initialData.items.map(i => `
@@ -725,18 +737,30 @@ async function seedSampleData() {
       await restRef.collection("menuItems").add(it);
     }
 
-    // 3. Masalar
-    for (let i = 1; i <= 8; i++) {
-      const key = "sk_t" + i + "_" + Math.floor(1000 + Math.random() * 9000);
-      await restRef.collection("tables").doc("table-" + i).set({
-        label: "Masa " + i,
+    // 3. Masalar (BAR, İÇ 1-2, DIŞ 1-4, Y1, Y2)
+    const tablesList = [
+      { id: "table-bar", label: "BAR" },
+      { id: "table-ic-1", label: "İÇ 1" },
+      { id: "table-ic-2", label: "İÇ 2" },
+      { id: "table-dis-1", label: "DIŞ 1" },
+      { id: "table-dis-2", label: "DIŞ 2" },
+      { id: "table-dis-3", label: "DIŞ 3" },
+      { id: "table-dis-4", label: "DIŞ 4" },
+      { id: "table-y-1", label: "Y1" },
+      { id: "table-y-2", label: "Y2" }
+    ];
+
+    const oldTablesSnap = await restRef.collection("tables").get();
+    await Promise.all(oldTablesSnap.docs.map(t => t.ref.delete()));
+
+    for (const tbl of tablesList) {
+      const key = "sk_" + tbl.id.replace("table-", "") + "_" + Math.floor(1000 + Math.random() * 9000);
+      await restRef.collection("tables").doc(tbl.id).set({
+        label: tbl.label,
         isActive: true,
         qrKey: key
       });
     }
-    await restRef.collection("tables").doc("table-bahce-1").set({ label: "Bahçe 1", isActive: true, qrKey: "sk_bh1_" + Math.floor(1000 + Math.random() * 9000) });
-    await restRef.collection("tables").doc("table-bahce-2").set({ label: "Bahçe 2", isActive: true, qrKey: "sk_bh2_" + Math.floor(1000 + Math.random() * 9000) });
-    await restRef.collection("tables").doc("table-teras-1").set({ label: "Teras 1", isActive: true, qrKey: "sk_tr1_" + Math.floor(1000 + Math.random() * 9000) });
 
     console.log("Sade.C Menüsü ve Masaları Başarıyla Yüklendi!");
   } catch (err) {
