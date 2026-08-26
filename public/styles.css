@@ -45,7 +45,7 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-main);
   line-height: 1.5;
-  padding-bottom: 90px;
+  padding-bottom: 0;
   min-height: 100vh;
   position: relative;
   -webkit-font-smoothing: antialiased;
@@ -1194,8 +1194,8 @@ body {
    APP FOOTER & CREDITS
    ============================================================ */
 .app-footer {
-  margin-top: 40px;
-  padding: 0 16px 120px;
+  margin-top: 24px;
+  padding: 0 16px 28px;
   text-align: center;
 }
 
@@ -1203,23 +1203,23 @@ body {
   position: relative;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(212, 169, 106, 0.4), transparent);
-  margin-bottom: 28px;
+  margin-bottom: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .footer-divider span {
-  background: var(--bg-cream, #161a18);
-  padding: 0 12px;
-  font-size: 1rem;
+  background: var(--surface, #FFFFFF);
+  padding: 0 14px;
+  font-size: 1.1rem;
 }
 
 .footer-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .footer-brand {
@@ -1228,13 +1228,24 @@ body {
   align-items: center;
 }
 
-.footer-logo {
-  width: 48px;
-  height: 48px;
+.footer-logo-wrap {
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
+  background: var(--primary-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1.5px solid var(--gold);
   margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 14px rgba(30, 58, 47, 0.25);
+}
+
+.footer-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
 }
 
 .footer-title {
