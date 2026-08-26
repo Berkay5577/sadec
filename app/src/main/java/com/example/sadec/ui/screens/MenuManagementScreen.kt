@@ -154,7 +154,7 @@ fun MenuManagementScreen(
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(top = 10.dp, bottom = 90.dp)
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 110.dp)
                 ) {
                     item {
                         Text(

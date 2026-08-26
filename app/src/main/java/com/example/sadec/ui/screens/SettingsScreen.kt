@@ -339,6 +339,9 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Oturumu Kapat", fontWeight = FontWeight.Bold)
             }
+
+            // Generous bottom spacer so content is never cut off by navigation bar
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
