@@ -48,7 +48,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                windowInsets = TopAppBarDefaults.windowInsets,
                 title = { Text("Ayarlar & Restoran Bilgisi", fontWeight = FontWeight.Bold, color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = ForestGreen,

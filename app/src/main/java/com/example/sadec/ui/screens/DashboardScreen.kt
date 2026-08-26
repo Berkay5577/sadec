@@ -107,7 +107,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                windowInsets = TopAppBarDefaults.windowInsets,
                 title = { Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

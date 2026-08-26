@@ -36,7 +36,7 @@ fun OrderDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                windowInsets = TopAppBarDefaults.windowInsets,
                 title = { Text("Sipariş Detayı (#${order.id.takeLast(6).uppercase()})", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

@@ -67,7 +67,7 @@ fun AddEditProductScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                windowInsets = TopAppBarDefaults.windowInsets,
                 title = { Text(if (editingItem != null) "Ürünü Düzenle" else "Yeni Ürün Ekle", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

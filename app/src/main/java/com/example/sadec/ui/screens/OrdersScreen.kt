@@ -48,9 +48,9 @@ fun OrdersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+                windowInsets = TopAppBarDefaults.windowInsets,
                 title = {
-                    Column(modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)) {
+                    Column {
                         Text(
                             text = restaurant?.name ?: "Sade.C Kahve Gerze",
                             style = MaterialTheme.typography.titleLarge,

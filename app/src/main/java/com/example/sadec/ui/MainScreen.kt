@@ -52,6 +52,7 @@ fun MainScreen(
     val isRootScreen = currentScreen is Screen.Orders || currentScreen is Screen.Menu || currentScreen is Screen.Tables || currentScreen is Screen.Settings
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         bottomBar = {
             if (isRootScreen) {
                 NavigationBar(
@@ -113,7 +114,11 @@ fun MainScreen(
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = padding.calculateBottomPadding())
+        ) {
             when (val screen = currentScreen) {
                 is Screen.Orders -> {
                     OrdersScreen(
