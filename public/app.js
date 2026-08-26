@@ -109,6 +109,10 @@ function formatCurrency(amount) {
 
 // ========== VIEW MANAGEMENT ==========
 function showCategoryLanding() {
+  if (categories.length === 0) {
+    showMenuItems("all");
+    return;
+  }
   currentView = "categories";
   categoryLandingEl.style.display = "grid";
   menuSectionEl.style.display = "none";
@@ -122,8 +126,8 @@ function showMenuItems(categoryId) {
   activeCategory = categoryId || "all";
   categoryLandingEl.style.display = "none";
   menuSectionEl.style.display = "block";
-  categoryNavEl.style.display = "flex";
-  btnBackToCategoriesEl.style.display = "flex";
+  categoryNavEl.style.display = categories.length > 0 ? "flex" : "none";
+  btnBackToCategoriesEl.style.display = categories.length > 0 ? "flex" : "none";
   
   // Update active tab
   document.querySelectorAll(".category-btn").forEach(b => {
@@ -241,18 +245,14 @@ function listenRestaurantData() {
 function listenCategories() {
   db.collection("restaurants").doc(currentRestId).collection("categories")
     .orderBy("sortOrder", "asc")
-    .onSnapshot(async snapshot => {
+    .onSnapshot(snapshot => {
       categories = [];
       snapshot.forEach(doc => {
         categories.push({ id: doc.id, ...doc.data() });
       });
 
-      const hasOldDummy = categories.some(c => 
-        (c.name && (c.name.toLowerCase().includes("pizza") || c.name.toLowerCase().includes("burger")))
-      );
-
-      if (categories.length === 0 || hasOldDummy) {
-        await seedSampleData();
+      if (categories.length === 0) {
+        showMenuItems("all");
       } else {
         renderCategoryLanding();
         renderCategoryTabs();
@@ -260,13 +260,10 @@ function listenCategories() {
     }, err => {
       console.log("Category listen error:", err.message);
       db.collection("restaurants").doc(currentRestId).collection("categories")
-        .onSnapshot(async snap => {
+        .onSnapshot(snap => {
           categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          const hasOldDummy = categories.some(c => 
-            (c.name && (c.name.toLowerCase().includes("pizza") || c.name.toLowerCase().includes("burger")))
-          );
-          if (categories.length === 0 || hasOldDummy) {
-            await seedSampleData();
+          if (categories.length === 0) {
+            showMenuItems("all");
           } else {
             renderCategoryLanding();
             renderCategoryTabs();
