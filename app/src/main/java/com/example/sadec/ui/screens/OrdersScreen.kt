@@ -116,14 +116,6 @@ fun OrdersScreen(
                             color = Slate500,
                             modifier = Modifier.padding(top = 4.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = { viewModel.seedSampleMenu() },
-                            colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
-                        ) {
-                            Text("Örnek Menü & Masaları Yükle 🍔")
-                        }
                     }
                 }
             } else {

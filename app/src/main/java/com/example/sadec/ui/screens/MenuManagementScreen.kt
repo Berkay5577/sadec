@@ -91,16 +91,7 @@ fun MenuManagementScreen(
                 // PRODUCTS TAB
                 if (menuItems.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Henüz ürün eklenmemiş.", color = Slate500)
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { viewModel.seedSampleMenu() },
-                                colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)
-                            ) {
-                                Text("Örnek Menüyü Yükle 🍔")
-                            }
-                        }
+                        Text("Henüz ürün eklenmemiş.", color = Slate500)
                     }
                 } else {
                     LazyColumn(
