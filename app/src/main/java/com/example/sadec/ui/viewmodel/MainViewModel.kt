@@ -10,6 +10,7 @@ import com.example.sadec.data.repository.FirestoreRepository
 import com.example.sadec.data.repository.StorageRepository
 import com.example.sadec.util.SoundPlayer
 import com.google.firebase.messaging.FirebaseMessaging
+import java.util.Date
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -262,6 +263,38 @@ class MainViewModel @JvmOverloads constructor(
             }.onFailure {
                 _uiMessage.emit("Güncellenemedi: ${it.localizedMessage}")
             }
+        }
+    }
+
+    // --- MANUAL SALE / DASHBOARD ACTIONS ---
+    fun addManualSale(
+        items: List<OrderItem>,
+        tableLabel: String = "KASA / ELDEN",
+        customerName: String = "",
+        note: String = ""
+    ) {
+        viewModelScope.launch {
+            if (items.isEmpty()) {
+                _uiMessage.emit("Lütfen en az bir ürün seçin.")
+                return@launch
+            }
+            val totalPrice = items.sumOf { it.unitPrice * it.quantity }
+            val order = Order(
+                tableId = "table-kasa",
+                tableLabel = tableLabel.ifBlank { "KASA / ELDEN" },
+                customerName = customerName.ifBlank { "Kasa Satışı" },
+                status = "delivered", // Doğrudan teslim edilmiş satış
+                items = items,
+                totalPrice = totalPrice,
+                note = note,
+                createdAt = Date()
+            )
+            firestoreRepository.createOrder(_restaurantId.value, order)
+                .onSuccess {
+                    _uiMessage.emit("Satış başarıyla tamamlandı ve kaydedildi! 💸")
+                }.onFailure {
+                    _uiMessage.emit("Satış kaydedilemedi: ${it.localizedMessage}")
+                }
         }
     }
 

@@ -14,7 +14,10 @@ import androidx.compose.ui.unit.dp
 import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.ui.screens.*
+import com.example.sadec.ui.theme.ForestGreen
 import com.example.sadec.ui.theme.OrangePrimary
+import com.example.sadec.ui.theme.Slate500
+import com.example.sadec.ui.theme.WarmGold
 import com.example.sadec.ui.viewmodel.MainViewModel
 
 sealed class Screen {
@@ -24,6 +27,7 @@ sealed class Screen {
     data class AddEditProduct(val item: MenuItem?) : Screen()
     object Tables : Screen()
     object Settings : Screen()
+    object Dashboard : Screen()
 }
 
 @Composable
@@ -52,15 +56,24 @@ fun MainScreen(
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 8.dp
                 ) {
+                    val navItemColors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = WarmGold,
+                        selectedTextColor = ForestGreen,
+                        indicatorColor = ForestGreen,
+                        unselectedIconColor = Slate500,
+                        unselectedTextColor = Slate500
+                    )
+
                     NavigationBarItem(
                         selected = currentScreen is Screen.Orders,
                         onClick = { currentScreen = Screen.Orders },
+                        colors = navItemColors,
                         icon = {
                             BadgedBox(
                                 badge = {
                                     if (pendingCount > 0) {
-                                        Badge(containerColor = OrangePrimary) {
-                                            Text("$pendingCount", color = Color.White, fontWeight = FontWeight.Bold)
+                                        Badge(containerColor = WarmGold) {
+                                            Text("$pendingCount", color = ForestGreen, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -68,28 +81,31 @@ fun MainScreen(
                                 Icon(Icons.Default.ReceiptLong, contentDescription = "Siparişler")
                             }
                         },
-                        label = { Text("Siparişler") }
+                        label = { Text("Siparişler", fontWeight = if (currentScreen is Screen.Orders) FontWeight.Bold else FontWeight.Normal) }
                     )
 
                     NavigationBarItem(
                         selected = currentScreen is Screen.Menu,
                         onClick = { currentScreen = Screen.Menu },
+                        colors = navItemColors,
                         icon = { Icon(Icons.Default.RestaurantMenu, contentDescription = "Menü") },
-                        label = { Text("Menü") }
+                        label = { Text("Menü", fontWeight = if (currentScreen is Screen.Menu) FontWeight.Bold else FontWeight.Normal) }
                     )
 
                     NavigationBarItem(
                         selected = currentScreen is Screen.Tables,
                         onClick = { currentScreen = Screen.Tables },
+                        colors = navItemColors,
                         icon = { Icon(Icons.Default.QrCode2, contentDescription = "Masalar") },
-                        label = { Text("Masalar") }
+                        label = { Text("Masalar", fontWeight = if (currentScreen is Screen.Tables) FontWeight.Bold else FontWeight.Normal) }
                     )
 
                     NavigationBarItem(
                         selected = currentScreen is Screen.Settings,
                         onClick = { currentScreen = Screen.Settings },
+                        colors = navItemColors,
                         icon = { Icon(Icons.Default.Settings, contentDescription = "Ayarlar") },
-                        label = { Text("Ayarlar") }
+                        label = { Text("Ayarlar", fontWeight = if (currentScreen is Screen.Settings) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }
@@ -130,7 +146,14 @@ fun MainScreen(
                 is Screen.Settings -> {
                     SettingsScreen(
                         viewModel = viewModel,
+                        onNavigateToDashboard = { currentScreen = Screen.Dashboard },
                         onSignOut = onSignOut
+                    )
+                }
+                is Screen.Dashboard -> {
+                    DashboardScreen(
+                        viewModel = viewModel,
+                        onBack = { currentScreen = Screen.Settings }
                     )
                 }
             }

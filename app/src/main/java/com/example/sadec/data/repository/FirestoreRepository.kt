@@ -92,6 +92,19 @@ class FirestoreRepository {
         awaitClose { listenerRegistration.remove() }
     }
 
+    suspend fun createOrder(restaurantId: String, order: Order): Result<String> {
+        return try {
+            val docRef = db.collection("restaurants")
+                .document(restaurantId)
+                .collection("orders")
+                .add(order)
+                .await()
+            Result.success(docRef.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateOrderStatus(restaurantId: String, orderId: String, newStatus: String): Result<Unit> {
         return try {
             db.collection("restaurants")

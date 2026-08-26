@@ -4,12 +4,14 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,6 +34,7 @@ import com.example.sadec.util.SoundPlayer
 @Composable
 fun SettingsScreen(
     viewModel: MainViewModel,
+    onNavigateToDashboard: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val restaurantId by viewModel.restaurantId.collectAsState()
@@ -94,6 +97,57 @@ fun SettingsScreen(
                                 text = "Şube Kodu: $restaurantId",
                                 fontSize = 12.sp,
                                 color = Slate500
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 📊 SATIŞ DASHBOARD & RAPORLARI BANNER
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToDashboard() },
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = ForestGreen),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "📊 Satış Dashboard & Raporları",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = WarmGold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Adet bazlı ürün satışları (Espresso x14 vb.), ciro analizi, elle kasa satışı ve sipariş geçmişi.",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.88f),
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Surface(
+                        color = WarmGold,
+                        shape = CircleShape,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Aç",
+                                tint = ForestGreen,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
