@@ -82,74 +82,79 @@ fun TableManagementScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-        ) {
-            // Security Info Banner
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+        if (tables.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(28.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text("🔒 Korumalı QR Doğrulaması Aktif", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ForestGreen)
-                        Text("QR kodlar şifrelidir. Müşteriler bağlantıyı kopyalayıp dükkan dışından sipariş veremez.", fontSize = 11.sp, color = SageGreen)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(64.dp), tint = Slate500)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Henüz masa eklenmemiş", fontWeight = FontWeight.SemiBold, color = Slate500)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            newTableLabel = "BAR"
+                            showAddTableDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                    ) {
+                        Text("İlk Masayı Ekle", color = WarmGold)
                     }
                 }
             }
-
-            if (tables.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(64.dp), tint = Slate500)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Henüz masa eklenmemiş", fontWeight = FontWeight.SemiBold, color = Slate500)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                newTableLabel = "BAR"
-                                showAddTableDialog = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(
+                    top = paddingValues.calculateTopPadding() + 8.dp,
+                    bottom = 120.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Security Info Banner (Spans full width)
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("İlk Masayı Ekle", color = WarmGold)
+                            Icon(Icons.Default.Security, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("🔒 Korumalı QR Doğrulaması Aktif", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ForestGreen)
+                                Text("QR kodlar şifrelidir. Müşteriler bağlantıyı kopyalayıp dükkan dışından sipariş veremez.", fontSize = 11.sp, color = SageGreen)
+                            }
                         }
                     }
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(tables) { table ->
-                        TableCard(
-                            table = table,
-                            onShowQr = {
-                                val key = if (table.qrKey.isNotBlank()) table.qrKey else UUID.randomUUID().toString().take(8)
-                                if (table.qrKey.isBlank()) {
-                                    viewModel.saveTable(table.label, table.id, key)
-                                }
-                                val webUrl = "$baseUrl/?restId=$restaurantId&table=${table.id}&key=$key"
-                                qrBitmap = QrCodeGenerator.generateQrBitmap(webUrl, 600)
-                                selectedTableForQr = table.copy(qrKey = key)
-                            },
-                            onDelete = {
-                                viewModel.deleteTable(table.id)
+
+                items(tables, key = { it.id }) { table ->
+                    TableCard(
+                        table = table,
+                        onShowQr = {
+                            val key = if (table.qrKey.isNotBlank()) table.qrKey else UUID.randomUUID().toString().take(8)
+                            if (table.qrKey.isBlank()) {
+                                viewModel.saveTable(table.label, table.id, key)
                             }
-                        )
-                    }
+                            val webUrl = "$baseUrl/?restId=$restaurantId&table=${table.id}&key=$key"
+                            qrBitmap = QrCodeGenerator.generateQrBitmap(webUrl, 600)
+                            selectedTableForQr = table.copy(qrKey = key)
+                        },
+                        onDelete = {
+                            viewModel.deleteTable(table.id)
+                        }
+                    )
                 }
             }
         }
