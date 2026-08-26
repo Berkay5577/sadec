@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaffMember(restId) {
+      return isAuthenticated() &&
+        (
+          request.auth.uid == restId ||
+          exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.restaurantId == restId
+        );
+    }
+
+    // Restaurants
+    match /restaurants/{restId} {
+      allow read: if true; // Public view for QR menu header
+      allow write: if isAuthenticated();
+
+      // Categories
+      match /categories/{catId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      // Menu Items
+      match /menuItems/{itemId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      // Tables
+      match /tables/{tableId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+
+      // Orders
+      match /orders/{orderId} {
+        // Customer can create an order and read their placed order
+        allow create: if true;
+        allow read: if true;
+        // Staff can update status or manage orders
+        allow update, delete: if isAuthenticated();
+      }
+    }
+
+    // Staff records
+    match /staff/{staffId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}

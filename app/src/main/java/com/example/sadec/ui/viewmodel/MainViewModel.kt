@@ -1,0 +1,303 @@
+package com.example.sadec.ui.viewmodel
+
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.sadec.data.model.*
+import com.example.sadec.data.repository.AuthRepository
+import com.example.sadec.data.repository.FirestoreRepository
+import com.example.sadec.data.repository.StorageRepository
+import com.example.sadec.util.SoundPlayer
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+class MainViewModel @JvmOverloads constructor(
+    application: Application,
+    private val authRepository: AuthRepository = AuthRepository(),
+    private val firestoreRepository: FirestoreRepository = FirestoreRepository(),
+    private val storageRepository: StorageRepository = StorageRepository()
+) : AndroidViewModel(application) {
+
+    private val _restaurantId = MutableStateFlow("sadec-restaurant")
+    val restaurantId: StateFlow<String> = _restaurantId.asStateFlow()
+
+    private val _restaurant = MutableStateFlow<Restaurant?>(null)
+    val restaurant: StateFlow<Restaurant?> = _restaurant.asStateFlow()
+
+    private val _isLoggedIn = MutableStateFlow(false)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _orders = MutableStateFlow<List<Order>>(emptyList())
+    val orders: StateFlow<List<Order>> = _orders.asStateFlow()
+
+    private val _selectedStatusFilter = MutableStateFlow("all")
+    val selectedStatusFilter: StateFlow<String> = _selectedStatusFilter.asStateFlow()
+
+    private val _categories = MutableStateFlow<List<Category>>(emptyList())
+    val categories: StateFlow<List<Category>> = _categories.asStateFlow()
+
+    private val _menuItems = MutableStateFlow<List<MenuItem>>(emptyList())
+    val menuItems: StateFlow<List<MenuItem>> = _menuItems.asStateFlow()
+
+    private val _tables = MutableStateFlow<List<TableItem>>(emptyList())
+    val tables: StateFlow<List<TableItem>> = _tables.asStateFlow()
+
+    private val _uiMessage = MutableSharedFlow<String>()
+    val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
+
+    private var previousOrderIds = setOf<String>()
+    private var isFirstOrdersLoad = true
+
+    init {
+        try {
+            checkUserSession()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun checkUserSession() {
+        try {
+            val user = authRepository.currentUser
+            _isLoggedIn.value = user != null
+            if (user != null) {
+                initDataListeners()
+                fetchAndRegisterFcmToken()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _isLoggedIn.value = false
+        }
+    }
+
+    fun setRestaurantId(id: String) {
+        if (id.isNotBlank() && id != _restaurantId.value) {
+            _restaurantId.value = id
+            initDataListeners()
+        }
+    }
+
+    fun setStatusFilter(filter: String) {
+        _selectedStatusFilter.value = filter
+    }
+
+    private fun initDataListeners() {
+        val restId = _restaurantId.value
+
+        // Load / Ensure Restaurant Doc
+        viewModelScope.launch {
+            try {
+                _restaurant.value = firestoreRepository.getOrCreateRestaurant(restId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // Listen Orders (Realtime)
+        viewModelScope.launch {
+            firestoreRepository.listenOrders(restId)
+                .catch { e -> _uiMessage.emit("Siparişler yüklenemedi: ${e.message}") }
+                .collect { orderList ->
+                    val currentPendingIds = orderList.filter { it.status == "pending" }.map { it.id }.toSet()
+                    if (!isFirstOrdersLoad) {
+                        val newArrivals = currentPendingIds - previousOrderIds
+                        if (newArrivals.isNotEmpty()) {
+                            SoundPlayer.playOrderAlert(getApplication())
+                            _uiMessage.emit("🔔 Yeni sipariş geldi!")
+                        }
+                    }
+                    previousOrderIds = currentPendingIds
+                    isFirstOrdersLoad = false
+
+                    _orders.value = orderList
+                }
+        }
+
+        // Listen Categories (Realtime)
+        viewModelScope.launch {
+            firestoreRepository.listenCategories(restId)
+                .catch { e -> _uiMessage.emit("Kategoriler yüklenemedi: ${e.message}") }
+                .collect { _categories.value = it }
+        }
+
+        // Listen Menu Items (Realtime)
+        viewModelScope.launch {
+            firestoreRepository.listenMenuItems(restId)
+                .catch { e -> _uiMessage.emit("Menü yüklenemedi: ${e.message}") }
+                .collect { _menuItems.value = it }
+        }
+
+        // Listen Tables (Realtime)
+        viewModelScope.launch {
+            firestoreRepository.listenTables(restId)
+                .catch { e -> _uiMessage.emit("Masalar yüklenemedi: ${e.message}") }
+                .collect { _tables.value = it }
+        }
+    }
+
+    // --- AUTH ACTIONS ---
+    fun signIn(email: String, pass: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = authRepository.signIn(email, pass)
+            res.onSuccess {
+                _isLoggedIn.value = true
+                initDataListeners()
+                fetchAndRegisterFcmToken()
+                _uiMessage.emit("Giriş başarılı!")
+                onSuccess()
+            }.onFailure {
+                _uiMessage.emit("Giriş hatası: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun signUp(email: String, pass: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = authRepository.signUp(email, pass)
+            res.onSuccess {
+                _isLoggedIn.value = true
+                initDataListeners()
+                fetchAndRegisterFcmToken()
+                _uiMessage.emit("Kayıt başarılı!")
+                onSuccess()
+            }.onFailure {
+                _uiMessage.emit("Kayıt hatası: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun enterDemoMode(onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = authRepository.signInAnonymously()
+            res.onSuccess {
+                _isLoggedIn.value = true
+                initDataListeners()
+                fetchAndRegisterFcmToken()
+                _uiMessage.emit("Demo moduna girildi.")
+                onSuccess()
+            }.onFailure {
+                _isLoggedIn.value = true
+                initDataListeners()
+                _uiMessage.emit("Demo moduna girildi.")
+                onSuccess()
+            }
+        }
+    }
+
+    fun signOut() {
+        authRepository.signOut()
+        _isLoggedIn.value = false
+    }
+
+    // --- ORDER ACTIONS ---
+    fun updateOrderStatus(orderId: String, newStatus: String) {
+        viewModelScope.launch {
+            val res = firestoreRepository.updateOrderStatus(_restaurantId.value, orderId, newStatus)
+            res.onFailure {
+                _uiMessage.emit("Durum güncellenemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    // --- CATEGORY ACTIONS ---
+    fun saveCategory(name: String, sortOrder: Int, categoryId: String = "") {
+        viewModelScope.launch {
+            val cat = Category(id = categoryId, name = name, sortOrder = sortOrder)
+            val res = firestoreRepository.saveCategory(_restaurantId.value, cat)
+            res.onSuccess { _uiMessage.emit("Kategori kaydedildi.") }
+                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
+        }
+    }
+
+    fun deleteCategory(categoryId: String) {
+        viewModelScope.launch {
+            val res = firestoreRepository.deleteCategory(_restaurantId.value, categoryId)
+            res.onSuccess { _uiMessage.emit("Kategori silindi.") }
+                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
+        }
+    }
+
+    // --- MENU ITEM ACTIONS ---
+    fun saveMenuItem(item: MenuItem, imageUri: Uri? = null, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            var finalItem = item
+            if (imageUri != null) {
+                val uploadRes = storageRepository.uploadProductImage(_restaurantId.value, imageUri)
+                uploadRes.onSuccess { url ->
+                    finalItem = finalItem.copy(imageUrl = url)
+                }
+            }
+
+            val res = firestoreRepository.saveMenuItem(_restaurantId.value, finalItem)
+            res.onSuccess {
+                _uiMessage.emit("Ürün kaydedildi.")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Hata: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun toggleMenuItemAvailability(itemId: String, isAvailable: Boolean) {
+        viewModelScope.launch {
+            firestoreRepository.toggleMenuItemAvailability(_restaurantId.value, itemId, isAvailable)
+        }
+    }
+
+    fun deleteMenuItem(itemId: String) {
+        viewModelScope.launch {
+            firestoreRepository.deleteMenuItem(_restaurantId.value, itemId)
+        }
+    }
+
+    // --- TABLE ACTIONS ---
+    fun saveTable(label: String, tableId: String = "") {
+        viewModelScope.launch {
+            val table = TableItem(id = tableId, label = label, isActive = true)
+            val res = firestoreRepository.saveTable(_restaurantId.value, table)
+            res.onSuccess { _uiMessage.emit("Masa kaydedildi.") }
+                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
+        }
+    }
+
+    fun deleteTable(tableId: String) {
+        viewModelScope.launch {
+            firestoreRepository.deleteTable(_restaurantId.value, tableId)
+        }
+    }
+
+    // --- SAMPLE SEED DATA ---
+    fun seedSampleMenu() {
+        viewModelScope.launch {
+            val res = firestoreRepository.seedSampleMenu(_restaurantId.value)
+            res.onSuccess { _uiMessage.emit("Örnek menü başarıyla yüklendi! 🍔") }
+                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
+        }
+    }
+
+    // --- FCM TOKEN ---
+    private fun fetchAndRegisterFcmToken() {
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    val user = authRepository.currentUser
+                    if (user != null && token != null) {
+                        viewModelScope.launch {
+                            firestoreRepository.updateStaffFcmToken(
+                                user.uid,
+                                _restaurantId.value,
+                                user.email ?: "Dükkan Sahibi",
+                                token
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sade.C Kahve — Gerze QR Menü & Sipariş</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Firebase SDKs via CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Main Menu View -->
+    <div id="menuView">
+      <!-- App Header -->
+      <header class="app-header">
+        <div class="header-top">
+          <div class="restaurant-info">
+            <div class="restaurant-logo-wrap">
+              <img src="logo.png" alt="Sade C Logo" class="restaurant-logo-img">
+            </div>
+            <div>
+              <h1 class="restaurant-name" id="restName">Sade.C Kahve</h1>
+              <span class="restaurant-sub">Kahvenin En Saf Hali • Gerze</span>
+            </div>
+          </div>
+          <div class="table-badge" id="tableBadge">
+            📍 <span id="tableLabelText">Masa 1</span>
+          </div>
+        </div>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="Kahve, tatlı, sandviç ara...">
+        </div>
+      </header>
+
+      <!-- Category Filter Tabs -->
+      <nav class="category-nav" id="categoryNav">
+        <button class="category-btn active" data-category="all">Tümü</button>
+      </nav>
+
+      <!-- Menu Products Section -->
+      <main class="menu-section" id="menuSection">
+        <div id="loadingIndicator" style="text-align: center; padding: 40px; color: #64748b;">
+          Menü yükleniyor...
+        </div>
+        <div id="menuItemsContainer"></div>
+      </main>
+
+      <!-- Floating Cart Bar (Appears when cart has items) -->
+      <div class="cart-floating-bar" id="cartFloatingBar" style="display: none;">
+        <div class="cart-bar-left">
+          <span class="cart-bar-count" id="cartBarCount">0</span>
+          <span class="cart-bar-total" id="cartBarTotal">₺0,00</span>
+        </div>
+        <div class="cart-bar-right">
+          Sepeti Gör 🛒
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Order Tracking View (Shows after order is submitted) -->
+    <div id="trackingView" style="display: none;">
+      <div class="tracking-container">
+        <div class="tracking-card">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">☕✨</div>
+          <h2>Siparişiniz Alındı!</h2>
+          <p style="color: #64748b; font-size: 0.9rem; margin-top: 4px;">
+            <span id="trackTableText">Masa 1</span> • Sipariş No: <b id="trackOrderNo">#--</b>
+          </p>
+
+          <div class="status-badge-lg status-pending" id="trackStatusBadge">
+            Bekliyor
+          </div>
+
+          <!-- Status Progress Steps -->
+          <div class="status-steps">
+            <div class="step-item active" id="stepPending">
+              <div class="step-dot">1</div>
+              <span>Alındı</span>
+            </div>
+            <div class="step-item" id="stepPreparing">
+              <div class="step-dot">2</div>
+              <span>Hazırlanıyor</span>
+            </div>
+            <div class="step-item" id="stepReady">
+              <div class="step-dot">3</div>
+              <span>Hazır</span>
+            </div>
+            <div class="step-item" id="stepDelivered">
+              <div class="step-dot">4</div>
+              <span>Teslim</span>
+            </div>
+          </div>
+
+          <!-- Order Summary in Tracking -->
+          <div style="text-align: left; background: #f8fafc; border-radius: 12px; padding: 14px; margin-top: 20px;">
+            <h4 style="margin-bottom: 8px; font-size: 0.95rem;">Sipariş Özeti</h4>
+            <div id="trackItemsList" style="font-size: 0.88rem; color: #334155;"></div>
+            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-weight: 700; border-top: 1px solid #e2e8f0; padding-top: 8px;">
+              <span>Toplam Tutar:</span>
+              <span id="trackTotalAmount" style="color: #D4A96A;">₺0,00</span>
+            </div>
+          </div>
+
+          <button class="btn-primary" id="btnNewOrder" style="margin-top: 20px; background: #2C1A14;">
+            + Yeni Ürün Ekle / Menüye Dön
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Detail / Add to Cart Bottom Sheet Modal -->
+    <div class="modal-overlay" id="productModalOverlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <button class="sheet-close" id="btnCloseProductModal">✕</button>
+        
+        <div id="productModalContent">
+          <div style="width: 100%; height: 200px; border-radius: 14px; overflow: hidden; background: #1e1e1e; margin-bottom: 14px;">
+            <img id="modalProductImg" src="" alt="Ürün Görseli" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <h3 id="modalProductTitle" style="font-size: 1.25rem; font-family: 'Playfair Display', serif; margin-bottom: 6px;">Ürün Adı</h3>
+          <p id="modalProductDesc" style="color: #64748b; font-size: 0.9rem; margin-bottom: 12px;">Açıklama</p>
+          <div id="modalAllergens" class="allergens-list"></div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0;">
+            <span id="modalProductPrice" style="font-size: 1.35rem; font-weight: 700; color: #D4A96A;">₺0,00</span>
+            <div class="qty-controls">
+              <button class="qty-btn" id="modalQtyMinus">-</button>
+              <span class="qty-number" id="modalQtyNum">1</span>
+              <button class="qty-btn" id="modalQtyPlus">+</button>
+            </div>
+          </div>
+
+          <textarea id="modalProductNote" class="order-note-input" rows="2" placeholder="Özel isteğiniz var mı? (Örn: Az şekerli, laktozsuz süt vb.)"></textarea>
+
+          <button class="btn-primary" id="btnConfirmAddToCart">
+            Sepete Ekle • <span id="modalBtnTotal">₺0,00</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart Bottom Sheet Modal -->
+    <div class="modal-overlay" id="cartModalOverlay">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <button class="sheet-close" id="btnCloseCartModal">✕</button>
+
+        <h3 style="font-size: 1.2rem; font-family: 'Playfair Display', serif; margin-bottom: 4px;">Sipariş Sepetim</h3>
+        <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 14px;">
+          📍 <span id="cartModalTable">Masa 1</span> için sipariş veriyorsunuz.
+        </p>
+
+        <div class="cart-items-list" id="cartModalItems"></div>
+
+        <textarea id="cartOrderNote" class="order-note-input" rows="2" placeholder="Garson için genel sipariş notu (isteğe bağlı)..."></textarea>
+
+        <div class="summary-row total">
+          <span>Toplam Tutar</span>
+          <span id="cartModalTotalPrice">₺0,00</span>
+        </div>
+
+        <button class="btn-primary" id="btnSubmitOrder">
+          Siparişi Onayla & Gönder 🚀
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
