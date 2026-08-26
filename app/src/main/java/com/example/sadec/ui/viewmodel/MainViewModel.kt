@@ -329,15 +329,6 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    // --- SAMPLE SEED DATA ---
-    fun seedSampleMenu() {
-        viewModelScope.launch {
-            val res = firestoreRepository.seedSampleMenu(_restaurantId.value)
-            res.onSuccess { _uiMessage.emit("Örnek menü başarıyla yüklendi! 🍔") }
-                .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
-        }
-    }
-
     // --- FCM TOKEN ---
     private fun fetchAndRegisterFcmToken() {
         try {
