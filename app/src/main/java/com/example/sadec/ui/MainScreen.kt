@@ -11,11 +11,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.ui.screens.*
 import com.example.sadec.ui.theme.ForestGreen
-import com.example.sadec.ui.theme.OrangePrimary
 import com.example.sadec.ui.theme.SageGreen
 import com.example.sadec.ui.theme.Slate500
 import com.example.sadec.ui.theme.WarmGold
@@ -23,12 +23,13 @@ import com.example.sadec.ui.viewmodel.MainViewModel
 
 sealed class Screen {
     object Orders : Screen()
-    data class OrderDetail(val order: Order) : Screen()
+    object ActiveTables : Screen()
     object Menu : Screen()
+    object QrMenu : Screen()
+    object Settings : Screen()
+    data class OrderDetail(val order: Order) : Screen()
     data class CategoryDetail(val category: com.example.sadec.data.model.Category) : Screen()
     data class AddEditProduct(val item: MenuItem?, val defaultCategoryId: String = "") : Screen()
-    object Tables : Screen()
-    object Settings : Screen()
     object Dashboard : Screen()
 }
 
@@ -39,8 +40,16 @@ fun MainScreen(
 ) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Orders) }
     val orders by viewModel.orders.collectAsState()
-    val pendingCount = orders.count { it.status == "pending" }
+    val tables by viewModel.tables.collectAsState()
+    val pendingCount = orders.count { !it.isArchived && it.status == "pending" }
     val context = LocalContext.current
+
+    // Active unarchived tables count
+    val activeTablesCount = remember(tables, orders) {
+        tables.count { table ->
+            orders.any { ord -> ord.tableId == table.id && !ord.isArchived && ord.status != "cancelled" && (!ord.isFullyPaid() || ord.status == "pending" || ord.status == "preparing" || ord.status == "ready") }
+        }
+    }
 
     // Listen UI message toasts
     LaunchedEffect(Unit) {
@@ -49,7 +58,7 @@ fun MainScreen(
         }
     }
 
-    val isRootScreen = currentScreen is Screen.Orders || currentScreen is Screen.Menu || currentScreen is Screen.Tables || currentScreen is Screen.Settings
+    val isRootScreen = currentScreen is Screen.Orders || currentScreen is Screen.ActiveTables || currentScreen is Screen.Menu || currentScreen is Screen.QrMenu || currentScreen is Screen.Settings
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
@@ -67,6 +76,7 @@ fun MainScreen(
                         unselectedTextColor = Color.White.copy(alpha = 0.6f)
                     )
 
+                    // 1. Siparişler (Canlı Akış)
                     NavigationBarItem(
                         selected = currentScreen is Screen.Orders,
                         onClick = { currentScreen = Screen.Orders },
@@ -84,25 +94,13 @@ fun MainScreen(
                                 Icon(Icons.Default.ReceiptLong, contentDescription = "Siparişler")
                             }
                         },
-                        label = { Text("Siparişler", fontWeight = if (currentScreen is Screen.Orders) FontWeight.Bold else FontWeight.Normal) }
+                        label = { Text("Siparişler", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.Orders) FontWeight.Bold else FontWeight.Normal) }
                     )
 
+                    // 2. Açık Masalar (Sadece içinde ürün/sipariş olan masalar)
                     NavigationBarItem(
-                        selected = currentScreen is Screen.Menu,
-                        onClick = { currentScreen = Screen.Menu },
-                        colors = navItemColors,
-                        icon = { Icon(Icons.Default.RestaurantMenu, contentDescription = "Menü") },
-                        label = { Text("Menü", fontWeight = if (currentScreen is Screen.Menu) FontWeight.Bold else FontWeight.Normal) }
-                    )
-
-                    val tables by viewModel.tables.collectAsState()
-                    val activeTablesCount = tables.count { table ->
-                        orders.any { ord -> ord.tableId == table.id && !ord.isArchived && ord.status != "cancelled" && (!ord.isFullyPaid() || ord.status == "pending" || ord.status == "preparing" || ord.status == "ready") }
-                    }
-
-                    NavigationBarItem(
-                        selected = currentScreen is Screen.Tables,
-                        onClick = { currentScreen = Screen.Tables },
+                        selected = currentScreen is Screen.ActiveTables,
+                        onClick = { currentScreen = Screen.ActiveTables },
                         colors = navItemColors,
                         icon = {
                             BadgedBox(
@@ -114,18 +112,37 @@ fun MainScreen(
                                     }
                                 }
                             ) {
-                                Icon(Icons.Default.QrCode2, contentDescription = "Masalar")
+                                Icon(Icons.Default.TableBar, contentDescription = "Açık Masalar")
                             }
                         },
-                        label = { Text(if (activeTablesCount > 0) "Aktif Masalar ($activeTablesCount)" else "Masalar", fontWeight = if (currentScreen is Screen.Tables) FontWeight.Bold else FontWeight.Normal) }
+                        label = { Text("Açık Masalar", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.ActiveTables) FontWeight.Bold else FontWeight.Normal) }
                     )
 
+                    // 3. Menü (Kategoriler & Ürünler)
+                    NavigationBarItem(
+                        selected = currentScreen is Screen.Menu,
+                        onClick = { currentScreen = Screen.Menu },
+                        colors = navItemColors,
+                        icon = { Icon(Icons.Default.RestaurantMenu, contentDescription = "Menü") },
+                        label = { Text("Menü", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.Menu) FontWeight.Bold else FontWeight.Normal) }
+                    )
+
+                    // 4. QR Menü (Masa QR Kodları & Ekleme)
+                    NavigationBarItem(
+                        selected = currentScreen is Screen.QrMenu,
+                        onClick = { currentScreen = Screen.QrMenu },
+                        colors = navItemColors,
+                        icon = { Icon(Icons.Default.QrCode2, contentDescription = "QR Menü") },
+                        label = { Text("QR Menü", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.QrMenu) FontWeight.Bold else FontWeight.Normal) }
+                    )
+
+                    // 5. Ayarlar
                     NavigationBarItem(
                         selected = currentScreen is Screen.Settings,
                         onClick = { currentScreen = Screen.Settings },
                         colors = navItemColors,
                         icon = { Icon(Icons.Default.Settings, contentDescription = "Ayarlar") },
-                        label = { Text("Ayarlar", fontWeight = if (currentScreen is Screen.Settings) FontWeight.Bold else FontWeight.Normal) }
+                        label = { Text("Ayarlar", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.Settings) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }
@@ -141,6 +158,11 @@ fun MainScreen(
                     OrdersScreen(
                         viewModel = viewModel,
                         onOrderClick = { currentScreen = Screen.OrderDetail(it) }
+                    )
+                }
+                is Screen.ActiveTables -> {
+                    ActiveTablesScreen(
+                        viewModel = viewModel
                     )
                 }
                 is Screen.OrderDetail -> {
@@ -176,7 +198,7 @@ fun MainScreen(
                         }
                     )
                 }
-                is Screen.Tables -> {
+                is Screen.QrMenu -> {
                     TableManagementScreen(viewModel = viewModel)
                 }
                 is Screen.Settings -> {

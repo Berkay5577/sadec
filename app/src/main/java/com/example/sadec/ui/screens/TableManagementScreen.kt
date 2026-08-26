@@ -66,9 +66,9 @@ fun TableManagementScreen(
                 windowInsets = TopAppBarDefaults.windowInsets,
                 title = {
                     Column {
-                        Text("Masalar & Masa Hesapları", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Masa QR Kodları", fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            text = if (activeTableCount > 0) "$activeTableCount Aktif Masa Dolu" else "Tüm Masalar Müsait",
+                            text = "${tables.size} Masa Tanımlı • QR Standı & PDF",
                             fontSize = 12.sp,
                             color = WarmGold
                         )
