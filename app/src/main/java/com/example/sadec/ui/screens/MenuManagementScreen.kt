@@ -1,17 +1,22 @@
 package com.example.sadec.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,9 +43,14 @@ fun MenuManagementScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Menü & Kategoriler", fontWeight = FontWeight.Bold, color = ForestGreen)
                         Text(
-                            text = "${categories.size} Kategori • ${menuItems.size} Ürün",
+                            text = "Menü & Kategoriler",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = ForestGreen
+                        )
+                        Text(
+                            text = if (categories.isEmpty()) "Menü henüz boş" else "${categories.size} Kategori • ${menuItems.size} Ürün",
                             fontSize = 12.sp,
                             color = SageGreen
                         )
@@ -49,73 +59,108 @@ fun MenuManagementScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = {
                     categoryNameInput = ""
                     categoryOrderInput = (categories.size + 1).toString()
                     showAddCategoryDialog = true
                 },
                 containerColor = ForestGreen,
-                contentColor = WarmGold
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Kategori Ekle")
-                    Text("Yeni Kategori Ekle", fontWeight = FontWeight.Bold)
-                }
-            }
+                contentColor = WarmGold,
+                shape = RoundedCornerShape(16.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
+                icon = { Icon(Icons.Default.Add, contentDescription = "Ekle") },
+                text = { Text("Yeni Kategori Ekle", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+            )
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             if (categories.isEmpty()) {
+                // Elegant Minimal Empty State
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("📂", fontSize = 48.sp)
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "Henüz kategori eklenmemiş",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = ForestGreen
-                        )
-                        Text(
-                            text = "Menünüzü oluşturmak için aşağıdaki 'Yeni Kategori Ekle' butonuna basarak ilk kategorinizi oluşturun.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Slate500,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(SoftMintGreen),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RestaurantMenu,
+                                contentDescription = null,
+                                modifier = Modifier.size(44.dp),
+                                tint = ForestGreen
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Menünüz Henüz Boş",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = ForestGreen
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Menünüzü oluşturmak için ilk kategorinizi (örn: Sıcak Kahveler, Tatlılar) ekleyerek başlayın.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate500,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                categoryNameInput = ""
+                                categoryOrderInput = "1"
+                                showAddCategoryDialog = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = WarmGold)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("İlk Kategorinizi Ekleyin", fontWeight = FontWeight.Bold, color = WarmGold)
+                        }
                     }
                 }
             } else {
-                Text(
-                    text = "Kategoriler (Detay ve ürünler için dokunun)",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Slate500,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 90.dp)
                 ) {
+                    item {
+                        Text(
+                            text = "KATEGORİLER",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = Slate500,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                        )
+                    }
+
                     items(categories, key = { it.id }) { cat ->
                         val count = menuItems.count { it.categoryId == cat.id }
-                        CategoryListCard(
+                        PremiumCategoryCard(
                             category = cat,
                             productCount = count,
                             onClick = { onCategoryClick(cat) }
@@ -130,24 +175,37 @@ fun MenuManagementScreen(
     if (showAddCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showAddCategoryDialog = false },
-            title = { Text("Yeni Kategori Ekle", fontWeight = FontWeight.Bold, color = ForestGreen) },
+            title = {
+                Text(
+                    text = "Yeni Kategori Oluştur",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = ForestGreen
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Menüde görünecek kategori adını girin (Örn: Sıcak Kahveler):", fontSize = 13.sp, color = Slate500)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Menüde müşterilerin göreceği kategori ismini ve sıra numarasını belirleyin:",
+                        fontSize = 13.sp,
+                        color = Slate500
+                    )
                     OutlinedTextField(
                         value = categoryNameInput,
                         onValueChange = { categoryNameInput = it },
                         label = { Text("Kategori Adı") },
-                        placeholder = { Text("Örn: Soğuk Kahveler") },
+                        placeholder = { Text("Örn: Sıcak Kahveler") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                     OutlinedTextField(
                         value = categoryOrderInput,
                         onValueChange = { categoryOrderInput = it },
                         label = { Text("Sıra Numarası") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             },
@@ -160,14 +218,15 @@ fun MenuManagementScreen(
                             showAddCategoryDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Kategoriyi Oluştur", color = WarmGold, fontWeight = FontWeight.Bold)
+                    Text("Oluştur", color = WarmGold, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddCategoryDialog = false }) {
-                    Text("Vazgeç")
+                    Text("Vazgeç", color = Slate500)
                 }
             }
         )
@@ -175,23 +234,34 @@ fun MenuManagementScreen(
 }
 
 @Composable
-fun CategoryListCard(
+fun PremiumCategoryCard(
     category: Category,
     productCount: Int,
     onClick: () -> Unit
 ) {
+    // Dynamic icon based on category name
+    val lowerName = category.name.lowercase()
+    val (iconSymbol, iconBg) = when {
+        lowerName.contains("sıcak") || lowerName.contains("kahve") || lowerName.contains("coffee") -> "☕" to SoftMintGreen
+        lowerName.contains("soğuk") || lowerName.contains("içecek") || lowerName.contains("ice") -> "🧊" to Color(0xFFE0F2FE)
+        lowerName.contains("tatlı") || lowerName.contains("pasta") || lowerName.contains("kek") -> "🍰" to Color(0xFFFEF3C7)
+        lowerName.contains("sandviç") || lowerName.contains("tost") || lowerName.contains("spesiyal") -> "🥪" to Color(0xFFFEE2E2)
+        lowerName.contains("atıştırmalık") || lowerName.contains("börek") || lowerName.contains("poğaça") -> "🥐" to Color(0xFFEDE9FE)
+        else -> "🍽️" to SoftMintGreen
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -199,37 +269,67 @@ fun CategoryListCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Surface(
-                    color = SoftMintGreen,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.size(48.dp)
+                // Category Icon Badge
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(iconBg),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("📁", fontSize = 22.sp)
-                    }
+                    Text(text = iconSymbol, fontSize = 22.sp)
                 }
 
+                // Category Info
                 Column {
                     Text(
                         text = category.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = ForestGreen
+                        color = ForestGreen,
+                        fontSize = 16.sp
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$productCount Ürün • Sıra #${category.sortOrder}",
-                        fontSize = 13.sp,
-                        color = SageGreen
-                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            color = SoftMintGreen,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "$productCount Ürün",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ForestGreen,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Text(
+                            text = "• Sıra #${category.sortOrder}",
+                            fontSize = 12.sp,
+                            color = Slate500
+                        )
+                    }
                 }
             }
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = "Detay",
-                tint = ForestGreen
-            )
+            // Arrow Action
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(SoftMintGreen.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = "Detay",
+                    modifier = Modifier.size(13.dp),
+                    tint = ForestGreen
+                )
+            }
         }
     }
 }

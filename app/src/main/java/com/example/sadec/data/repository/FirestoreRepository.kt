@@ -39,20 +39,6 @@ class FirestoreRepository {
             newRest
         }
 
-        // Otomatik Menü Kontrolü: Kategoriler boşsa veya eski demo (Pizza/Burger) varsa temizle ve Sade C Gerze menüsünü yükle
-        try {
-            val catSnap = docRef.collection("categories").get().await()
-            val hasOldDemo = catSnap.documents.any { doc ->
-                val name = doc.getString("name") ?: ""
-                name.contains("Pizza", ignoreCase = true) || name.contains("Burger", ignoreCase = true)
-            }
-            if (catSnap.isEmpty || hasOldDemo) {
-                seedSampleMenu(restaurantId)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
         return rest
     }
 
