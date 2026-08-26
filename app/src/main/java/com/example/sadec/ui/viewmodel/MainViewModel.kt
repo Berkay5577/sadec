@@ -21,7 +21,7 @@ class MainViewModel @JvmOverloads constructor(
     private val storageRepository: StorageRepository = StorageRepository()
 ) : AndroidViewModel(application) {
 
-    private val _restaurantId = MutableStateFlow("sadec-restaurant")
+    private val _restaurantId = MutableStateFlow("sadec-gerze")
     val restaurantId: StateFlow<String> = _restaurantId.asStateFlow()
 
     private val _restaurant = MutableStateFlow<Restaurant?>(null)

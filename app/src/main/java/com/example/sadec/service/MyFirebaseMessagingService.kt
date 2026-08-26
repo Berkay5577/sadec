@@ -28,7 +28,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onNewToken(token)
         val user = FirebaseAuth.getInstance().currentUser
         if (user != null) {
-            val restId = "sadec-restaurant" // or dynamic based on profile
+            val restId = "sadec-gerze"
             CoroutineScope(Dispatchers.IO).launch {
                 firestoreRepository.updateStaffFcmToken(user.uid, restId, user.email ?: "Dükkan Sahibi", token)
             }

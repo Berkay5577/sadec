@@ -4,16 +4,7 @@ service cloud.firestore {
 
     // Helper functions
     function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isStaffMember(restId) {
-      return isAuthenticated() &&
-        (
-          request.auth.uid == restId ||
-          exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.restaurantId == restId
-        );
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     // Restaurants
@@ -42,8 +33,7 @@ service cloud.firestore {
       // Orders
       match /orders/{orderId} {
         // Customer can create an order and read their placed order
-        allow create: if true;
-        allow read: if true;
+        allow create, read: if true;
         // Staff can update status or manage orders
         allow update, delete: if isAuthenticated();
       }

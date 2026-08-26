@@ -13,7 +13,7 @@ auth.signInAnonymously().catch(err => {
 });
 
 // App State
-let currentRestId = "sadec-restaurant";
+let currentRestId = "sadec-gerze";
 let currentTableId = "table-1";
 let currentTableLabel = "Masa 1";
 let isQrAuthorized = false;
