@@ -12,7 +12,11 @@ data class Restaurant(
     val phone: String = "",
     val address: String = "",
     val instagram: String = "",
-    val themeColor: String = "#2C1A14",
+    val themeColor: String = "#1E3A2F",
+    val webMenuUrl: String = "https://sadec.vercel.app", // Canlı Vercel QR Menü Alan Adı
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val enforceGeoFence: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -37,13 +41,15 @@ data class MenuItem(
 data class TableItem(
     @DocumentId val id: String = "",
     val label: String = "",
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val qrKey: String = "" // Güvenlik token'ı (QR kodun paylaşılmasını engeller)
 )
 
 data class Order(
     @DocumentId val id: String = "",
     val tableId: String = "",
     val tableLabel: String = "",
+    val customerName: String = "", // Müşterinin girdiği isim
     val status: String = "pending", // pending, preparing, ready, delivered, cancelled
     val items: List<OrderItem> = emptyList(),
     val totalPrice: Double = 0.0,
@@ -63,6 +69,6 @@ data class OrderItem(
 data class Staff(
     @DocumentId val id: String = "",
     val name: String = "",
-    val role: String = "owner", // owner, waiter, kitchen
+    val role: String = "owner",
     val fcmTokens: List<String> = emptyList()
 )

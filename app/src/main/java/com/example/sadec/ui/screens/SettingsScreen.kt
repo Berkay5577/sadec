@@ -2,22 +2,28 @@ package com.example.sadec.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.sadec.R
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
 import com.example.sadec.util.SoundPlayer
@@ -28,14 +34,18 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     onSignOut: () -> Unit
 ) {
-    val restaurant by viewModel.restaurant.collectAsState()
     val restaurantId by viewModel.restaurantId.collectAsState()
+    val restaurant by viewModel.restaurant.collectAsState()
     val context = LocalContext.current
+
+    var webUrlInput by remember(restaurant?.webMenuUrl) { 
+        mutableStateOf(restaurant?.webMenuUrl ?: "https://sadec.vercel.app") 
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ayarlar & Dükkan Profili", fontWeight = FontWeight.Bold) }
+                title = { Text("Ayarlar & Restoran Bilgisi", fontWeight = FontWeight.Bold, color = ForestGreen) }
             )
         }
     ) { padding ->
@@ -43,11 +53,11 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Restaurant Card
+            // Restaurant Info Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
@@ -58,26 +68,30 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(50.dp)
-                                .background(OrangePrimary, RoundedCornerShape(14.dp)),
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(ForestGreen)
+                                .padding(2.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = (restaurant?.name?.firstOrNull() ?: 'S').uppercase(),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 22.sp
+                            Image(
+                                painter = painterResource(id = R.drawable.sadec_logo),
+                                contentDescription = "Logo",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = restaurant?.name ?: "Sadec Restoran",
+                                text = restaurant?.name ?: "Sade.C Kahve Gerze",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = ForestGreen
                             )
                             Text(
-                                text = "Restoran Kodu: $restaurantId",
+                                text = "Şube Kodu: $restaurantId",
                                 fontSize = 12.sp,
                                 color = Slate500
                             )
@@ -86,14 +100,78 @@ fun SettingsScreen(
                 }
             }
 
+            // Web Menu Domain / URL Settings
+            Text("Web QR Menü Alan Adı (Vercel / Domain)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Vercel üzerinde açılan canlı web sitenizin adresini buraya yapıştırın. QR kodlar bu adresi kullanacaktır.",
+                        fontSize = 12.sp,
+                        color = Slate500
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = webUrlInput,
+                        onValueChange = { webUrlInput = it },
+                        label = { Text("Web Menü Linki") },
+                        placeholder = { Text("https://sadec.vercel.app") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (webUrlInput.isNotBlank()) {
+                                    viewModel.updateWebMenuUrl(webUrlInput.trim())
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                        ) {
+                            Text("Linki Kaydet", color = WarmGold, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                val targetUrl = if (webUrlInput.startsWith("http")) webUrlInput else "https://$webUrlInput"
+                                val fullTestUrl = "$targetUrl/?restId=$restaurantId&table=table-bar"
+                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fullTestUrl))
+                                context.startActivity(browserIntent)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen)
+                        ) {
+                            Text("Aç & Test Et 🌐", color = Color.White)
+                        }
+                    }
+                }
+            }
+
             // Quick Tools & Testing
-            Text("Test & Hızlı Araçlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Test & Ses Araçları", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
 
             // Test Sound
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -108,43 +186,12 @@ fun SettingsScreen(
                     }
                     Button(
                         onClick = { SoundPlayer.playOrderAlert(context) },
-                        colors = ButtonDefaults.buttonColors(containerColor = WarningYellow)
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold)
                     ) {
-                        Text("Çal 🔔", color = Slate900, fontWeight = FontWeight.Bold)
+                        Text("Çal 🔔", color = ForestGreen, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-
-            // Web Menu Browser Link
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Web QR Menüyü Aç", fontWeight = FontWeight.Bold)
-                        Text("Müşteri gözünden QR menüyü tarayıcıda hemen test edin.", fontSize = 12.sp, color = Slate500)
-                    }
-                    Button(
-                        onClick = {
-                            val webUrl = "https://sadec-9b458.web.app/?restId=$restaurantId&table=table-1"
-                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(webUrl))
-                            context.startActivity(browserIntent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = InfoBlue)
-                    ) {
-                        Text("Aç 🌐")
-                    }
-                }
-            }
-
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -160,7 +207,7 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed)
             ) {
-                Icon(Icons.Default.Logout, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Oturumu Kapat", fontWeight = FontWeight.Bold)
             }

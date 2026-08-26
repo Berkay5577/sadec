@@ -4,6 +4,7 @@ import com.example.sadec.data.model.*
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -53,6 +54,16 @@ class FirestoreRepository {
         }
 
         return rest
+    }
+
+    suspend fun updateRestaurantWebMenuUrl(restaurantId: String, webUrl: String): Result<Unit> {
+        return try {
+            val cleanUrl = webUrl.trim().removeSuffix("/")
+            db.collection("restaurants").document(restaurantId).update("webMenuUrl", cleanUrl).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // -------------------------------------------------------------
@@ -418,14 +429,34 @@ class FirestoreRepository {
                 restRef.collection("menuItems").add(item).await()
             }
 
-            // Masalar (Şifreli Güvenlik Anahtarları ile)
-            for (i in 1..8) {
-                val key = "sk_t${i}_" + (1000..9999).random()
-                restRef.collection("tables").document("table-$i").set(TableItem(id = "table-$i", label = "Masa $i", isActive = true, qrKey = key)).await()
+            // Masaları temizle ve tam istenen masaları oluştur
+            try {
+                val oldTables = restRef.collection("tables").get().await()
+                for (doc in oldTables.documents) {
+                    doc.reference.delete().await()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            restRef.collection("tables").document("table-bahce-1").set(TableItem(id = "table-bahce-1", label = "Bahçe 1", isActive = true, qrKey = "sk_bh1_" + (1000..9999).random())).await()
-            restRef.collection("tables").document("table-bahce-2").set(TableItem(id = "table-bahce-2", label = "Bahçe 2", isActive = true, qrKey = "sk_bh2_" + (1000..9999).random())).await()
-            restRef.collection("tables").document("table-teras-1").set(TableItem(id = "table-teras-1", label = "Teras 1", isActive = true, qrKey = "sk_tr1_" + (1000..9999).random())).await()
+
+            val tableList = listOf(
+                "table-bar" to "BAR",
+                "table-ic-1" to "İÇ 1",
+                "table-ic-2" to "İÇ 2",
+                "table-dis-1" to "DIŞ 1",
+                "table-dis-2" to "DIŞ 2",
+                "table-dis-3" to "DIŞ 3",
+                "table-dis-4" to "DIŞ 4",
+                "table-y-1" to "Y1",
+                "table-y-2" to "Y2"
+            )
+
+            for ((tId, tLabel) in tableList) {
+                val key = "sk_" + tId.replace("table-", "") + "_" + (1000..9999).random()
+                restRef.collection("tables").document(tId).set(
+                    TableItem(id = tId, label = tLabel, isActive = true, qrKey = key)
+                ).await()
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {

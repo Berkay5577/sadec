@@ -252,10 +252,23 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    // --- TABLE ACTIONS ---
-    fun saveTable(label: String, tableId: String = "") {
+    // --- RESTAURANT URL ACTIONS ---
+    fun updateWebMenuUrl(url: String) {
         viewModelScope.launch {
-            val table = TableItem(id = tableId, label = label, isActive = true)
+            val res = firestoreRepository.updateRestaurantWebMenuUrl(_restaurantId.value, url)
+            res.onSuccess {
+                _restaurant.value = _restaurant.value?.copy(webMenuUrl = url.trim().removeSuffix("/"))
+                _uiMessage.emit("Web Menü linki başarıyla kaydedildi!")
+            }.onFailure {
+                _uiMessage.emit("Güncellenemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    // --- TABLE ACTIONS ---
+    fun saveTable(label: String, tableId: String = "", qrKey: String = "") {
+        viewModelScope.launch {
+            val table = TableItem(id = tableId, label = label, isActive = true, qrKey = qrKey)
             val res = firestoreRepository.saveTable(_restaurantId.value, table)
             res.onSuccess { _uiMessage.emit("Masa kaydedildi.") }
                 .onFailure { _uiMessage.emit("Hata: ${it.localizedMessage}") }
