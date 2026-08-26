@@ -45,6 +45,11 @@ class MainViewModel @JvmOverloads constructor(
     private val _tables = MutableStateFlow<List<TableItem>>(emptyList())
     val tables: StateFlow<List<TableItem>> = _tables.asStateFlow()
 
+    private val prefs = application.getSharedPreferences("sadec_weekly_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _isWeeklyLockActive = MutableStateFlow(false)
+    val isWeeklyLockActive: StateFlow<Boolean> = _isWeeklyLockActive.asStateFlow()
+
     private val _uiMessage = MutableSharedFlow<String>()
     val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
 
@@ -113,6 +118,7 @@ class MainViewModel @JvmOverloads constructor(
                     isFirstOrdersLoad = false
 
                     _orders.value = orderList
+                    checkWeeklyPeriodStatus()
                 }
         }
 
@@ -239,6 +245,30 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun checkWeeklyPeriodStatus() {
+        val cal = java.util.Calendar.getInstance()
+        val currentYear = cal.get(java.util.Calendar.YEAR)
+        val currentWeek = cal.get(java.util.Calendar.WEEK_OF_YEAR)
+        val currentPeriod = "$currentYear-W$currentWeek"
+
+        // Check if there are any unarchived orders created in a previous week (older than current week)
+        val hasOrdersFromPreviousWeek = _orders.value.any { order ->
+            if (order.isArchived || order.status == "cancelled") return@any false
+            val orderDate = order.createdAt ?: return@any false
+            val orderCal = java.util.Calendar.getInstance().apply { time = orderDate }
+            val orderPeriod = "${orderCal.get(java.util.Calendar.YEAR)}-W${orderCal.get(java.util.Calendar.WEEK_OF_YEAR)}"
+            orderPeriod != currentPeriod
+        }
+
+        if (hasOrdersFromPreviousWeek) {
+            _isWeeklyLockActive.value = true
+        }
+    }
+
+    fun dismissWeeklyLock() {
+        _isWeeklyLockActive.value = false
+    }
+
     fun archiveWeeklyOrders(weekPeriod: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val unarchivedOrders = _orders.value.filter { !it.isArchived }.map { it.id }
@@ -249,6 +279,12 @@ class MainViewModel @JvmOverloads constructor(
             }
             val res = firestoreRepository.archiveOrders(_restaurantId.value, unarchivedOrders, weekPeriod)
             res.onSuccess {
+                val cal = java.util.Calendar.getInstance()
+                val currentYear = cal.get(java.util.Calendar.YEAR)
+                val currentWeek = cal.get(java.util.Calendar.WEEK_OF_YEAR)
+                val currentPeriod = "$currentYear-W$currentWeek"
+                prefs.edit().putString("last_closed_week_period", currentPeriod).apply()
+                _isWeeklyLockActive.value = false
                 _uiMessage.emit("Haftalık kasa başarıyla sıfırlandı ve arşivlendi! 📊✅")
                 onComplete()
             }.onFailure {

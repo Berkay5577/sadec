@@ -1,11 +1,14 @@
 package com.example.sadec.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -15,11 +18,9 @@ import androidx.compose.ui.unit.sp
 import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.ui.screens.*
-import com.example.sadec.ui.theme.ForestGreen
-import com.example.sadec.ui.theme.SageGreen
-import com.example.sadec.ui.theme.Slate500
-import com.example.sadec.ui.theme.WarmGold
+import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
+import java.util.Calendar
 
 sealed class Screen {
     object Orders : Screen()
@@ -42,6 +43,8 @@ fun MainScreen(
     val orders by viewModel.orders.collectAsState()
     val tables by viewModel.tables.collectAsState()
     val pendingCount = orders.count { !it.isArchived && it.status == "pending" }
+    val isWeeklyLockActive by viewModel.isWeeklyLockActive.collectAsState()
+    var hasDownloadedWeeklyExcel by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Active unarchived tables count
@@ -97,7 +100,7 @@ fun MainScreen(
                         label = { Text("Siparişler", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.Orders) FontWeight.Bold else FontWeight.Normal) }
                     )
 
-                    // 2. Açık Masalar (Sadece içinde ürün/sipariş olan masalar)
+                    // 2. Masalar (Sadece içinde ürün/sipariş olan açık masalar)
                     NavigationBarItem(
                         selected = currentScreen is Screen.ActiveTables,
                         onClick = { currentScreen = Screen.ActiveTables },
@@ -112,7 +115,7 @@ fun MainScreen(
                                     }
                                 }
                             ) {
-                                Icon(Icons.Default.TableBar, contentDescription = "Açık Masalar")
+                                Icon(Icons.Default.TableBar, contentDescription = "Masalar")
                             }
                         },
                         label = { Text("Masalar", fontSize = 11.sp, fontWeight = if (currentScreen is Screen.ActiveTables) FontWeight.Bold else FontWeight.Normal) }
@@ -216,5 +219,117 @@ fun MainScreen(
                 }
             }
         }
+    }
+
+    // Sunday Midnight / New Week Mandatory Unbypassable Lock Dialog
+    if (isWeeklyLockActive) {
+        val cal = Calendar.getInstance()
+        val currentWeekPeriod = "${cal.get(Calendar.YEAR)}-Hafta${cal.get(Calendar.WEEK_OF_YEAR)}"
+        val unarchivedOrders = orders.filter { !it.isArchived }
+
+        AlertDialog(
+            onDismissRequest = { /* Geçilemez / Kapatılamaz */ },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = DangerRed, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Haftalık Kasa Kapatma", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "⚠️ Yeni haftaya girildi (Pazar gecesi 00:00 tamamlandı).",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFB45309),
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Uygulamayı kullanmaya devam edebilmek için geçen haftanın satış detaylarını (gün, saat, müşteri, masa, adet, tutar) içeren resmi Excel raporunu indirmeniz ZORUNLUDUR.",
+                        fontSize = 12.sp,
+                        color = Slate700,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Surface(
+                        color = SoftMintGreen,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Dönem: $currentWeekPeriod", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                            val totalRevenue = unarchivedOrders.filter { it.status == "delivered" || it.items.any { i -> i.isPaid } }.sumOf { ord ->
+                                if (ord.items.any { it.isPaid }) ord.items.filter { it.isPaid }.sumOf { it.unitPrice * it.quantity } else ord.totalPrice
+                            }
+                            Text("Arşivlenecek Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
+                            Text("Toplam Adisyon: ${unarchivedOrders.size} Adet", fontSize = 12.sp, color = SageGreen)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Step 1: Download Excel Button
+                    Button(
+                        onClick = {
+                            val file = com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                                context = context,
+                                orders = unarchivedOrders,
+                                restaurantName = viewModel.restaurant.value?.name ?: "Sade.C Kahve Gerze",
+                                weekPeriod = currentWeekPeriod,
+                                onSuccess = {
+                                    hasDownloadedWeeklyExcel = true
+                                }
+                            )
+                            if (file != null) hasDownloadedWeeklyExcel = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (hasDownloadedWeeklyExcel) SageGreen else ForestGreen)
+                    ) {
+                        Icon(
+                            imageVector = if (hasDownloadedWeeklyExcel) Icons.Default.CheckCircle else Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = WarmGold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (hasDownloadedWeeklyExcel) "1. Adım: Excel İndirildi ✅" else "1. Adım: Haftalık Raporu İndir (Excel) 📥",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Step 2: Reset & Unlock Button (Disabled until Step 1 complete)
+                    Button(
+                        onClick = {
+                            viewModel.archiveWeeklyOrders(currentWeekPeriod) {
+                                hasDownloadedWeeklyExcel = false
+                            }
+                        },
+                        enabled = hasDownloadedWeeklyExcel,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = WarmGold,
+                            disabledContainerColor = Slate500.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = if (hasDownloadedWeeklyExcel) ForestGreen else Slate500)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "2. Adım: Kasayı Sıfırla & Yeni Haftaya Başla",
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasDownloadedWeeklyExcel) ForestGreen else Slate500
+                        )
+                    }
+                }
+            },
+            confirmButton = {}
+        )
     }
 }

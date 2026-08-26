@@ -2,18 +2,14 @@ package com.example.sadec.ui.screens
 
 import android.content.Intent
 import android.graphics.Bitmap
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items as lazyListItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,13 +24,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.sadec.data.model.Order
 import com.example.sadec.data.model.TableItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
 import com.example.sadec.util.QrCodeGenerator
-import java.text.SimpleDateFormat
-import java.util.*
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +36,6 @@ fun TableManagementScreen(
     viewModel: MainViewModel
 ) {
     val tables by viewModel.tables.collectAsState()
-    val orders by viewModel.orders.collectAsState()
     val restaurantId by viewModel.restaurantId.collectAsState()
     val restaurant by viewModel.restaurant.collectAsState()
     val context = LocalContext.current
@@ -53,12 +46,7 @@ fun TableManagementScreen(
     var showAddTableDialog by remember { mutableStateOf(false) }
     var newTableLabel by remember { mutableStateOf("") }
     var selectedTableForQr by remember { mutableStateOf<TableItem?>(null) }
-    var selectedTableForDetail by remember { mutableStateOf<TableItem?>(null) }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
-    // Active tables: tables that have unarchived, non-cancelled orders with unpaid items or pending status
-    val activeOrders = orders.filter { !it.isArchived && it.status != "cancelled" && (!it.isFullyPaid() || it.status == "pending" || it.status == "preparing" || it.status == "ready") }
-    val activeTableCount = tables.count { table -> activeOrders.any { it.tableId == table.id } }
 
     Scaffold(
         topBar = {
@@ -137,57 +125,30 @@ fun TableManagementScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Table Summary & Security Banner
+                // Security Info Banner (Spans full width)
                 item(span = { GridItemSpan(2) }) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (activeTableCount > 0) SoftMintGreen else MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
                     ) {
                         Row(
                             modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (activeTableCount > 0) Icons.Default.ReceiptLong else Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = if (activeTableCount > 0) ForestGreen else SuccessGreen,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            Icon(Icons.Default.Security, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(28.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(
-                                    text = if (activeTableCount > 0) "🟢 $activeTableCount Masada Açık Hesap Var" else "✨ Tüm Masalar Müsait",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = ForestGreen
-                                )
-                                Text(
-                                    text = "Masaya tıklayarak içindeki ürünleri görebilir, tek tek veya toplu ödeme alabilirsiniz.",
-                                    fontSize = 11.sp,
-                                    color = SageGreen
-                                )
+                                Text("🔒 Korumalı QR Doğrulaması Aktif", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ForestGreen)
+                                Text("QR kodlar şifrelidir. Müşteriler masadaki orijinal QR'ı okutmadan sipariş veremez.", fontSize = 11.sp, color = SageGreen)
                             }
                         }
                     }
                 }
 
                 items(tables, key = { it.id }) { table ->
-                    val tableOrders = activeOrders.filter { it.tableId == table.id }
-                    val isOccupied = tableOrders.isNotEmpty()
-                    val totalUnpaid = tableOrders.sumOf { it.remainingAmount() }
-
-                    TableCard(
+                    TableQrCard(
                         table = table,
-                        isOccupied = isOccupied,
-                        orderCount = tableOrders.size,
-                        totalUnpaid = totalUnpaid,
-                        onClick = {
-                            selectedTableForDetail = table
-                        },
                         onShowQr = {
                             val key = if (table.qrKey.isNotBlank()) table.qrKey else UUID.randomUUID().toString().take(8)
                             if (table.qrKey.isBlank()) {
@@ -238,228 +199,6 @@ fun TableManagementScreen(
             dismissButton = {
                 TextButton(onClick = { showAddTableDialog = false }) {
                     Text("İptal")
-                }
-            }
-        )
-    }
-
-    // Active Table Detail & Item-by-Item Payment Dialog
-    selectedTableForDetail?.let { table ->
-        val tableOrders = orders.filter { it.tableId == table.id && !it.isArchived && it.status != "cancelled" }
-        val activeTableOrders = tableOrders.filter { !it.isFullyPaid() || it.status == "pending" || it.status == "preparing" || it.status == "ready" }
-        val remainingTotal = activeTableOrders.sumOf { it.remainingAmount() }
-        val paidTotal = activeTableOrders.sumOf { it.paidAmount() }
-
-        AlertDialog(
-            onDismissRequest = { selectedTableForDetail = null },
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "📍 ${table.label}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = ForestGreen
-                        )
-                        Text(
-                            text = if (activeTableOrders.isNotEmpty()) "Açık Masa Hesabı (${activeTableOrders.size} Adisyon)" else "Masa Boş / Hesap Yok",
-                            fontSize = 12.sp,
-                            color = if (activeTableOrders.isNotEmpty()) WarmGold else Slate500
-                        )
-                    }
-                    if (activeTableOrders.isNotEmpty()) {
-                        Surface(
-                            color = SoftMintGreen,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "🟢 DOLU",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = ForestGreen,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 480.dp)
-                ) {
-                    if (activeTableOrders.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircleOutline,
-                                    contentDescription = null,
-                                    tint = SuccessGreen,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("Bu masada bekleyen sipariş veya ödeme yok.", fontWeight = FontWeight.SemiBold, color = ForestGreen)
-                                Text("Müşteri QR kodu okuttuğunda siparişler burada belirecektir.", fontSize = 12.sp, color = Slate500)
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f, fill = false),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            lazyListItems(activeTableOrders) { order ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "👤 ${order.customerName.ifBlank { "Misafir" }}",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                color = ForestGreen
-                                            )
-                                            val timeStr = order.createdAt?.let { SimpleDateFormat("HH:mm", Locale("tr")).format(it) } ?: ""
-                                            Text(text = "🕒 $timeStr", fontSize = 11.sp, color = Slate500)
-                                        }
-
-                                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ForestGreen.copy(alpha = 0.1f))
-
-                                        // Item by Item listing with payment buttons
-                                        order.items.forEachIndexed { itemIdx, item ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 4.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = "${item.quantity}x ${item.name}",
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        fontSize = 13.sp,
-                                                        color = if (item.isPaid) Slate500 else ForestGreen
-                                                    )
-                                                    Text(
-                                                        text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
-                                                        fontSize = 12.sp,
-                                                        color = if (item.isPaid) Slate500 else WarmGold,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    if (item.note.isNotBlank()) {
-                                                        Text(text = "Not: ${item.note}", fontSize = 11.sp, color = Color(0xFFD97706))
-                                                    }
-                                                }
-
-                                                if (item.isPaid) {
-                                                    Surface(
-                                                        color = SoftMintGreen,
-                                                        shape = RoundedCornerShape(8.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = "Ödendi ✅",
-                                                            color = ForestGreen,
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        )
-                                                    }
-                                                } else {
-                                                    Button(
-                                                        onClick = {
-                                                            viewModel.payOrderItem(order.id, itemIdx)
-                                                        },
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                        modifier = Modifier.height(34.dp)
-                                                    ) {
-                                                        Text("Öde 💳", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Full Order Quick Payment
-                                        if (!order.isFullyPaid()) {
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            OutlinedButton(
-                                                onClick = {
-                                                    viewModel.payFullOrder(order.id)
-                                                },
-                                                modifier = Modifier.fillMaxWidth().height(36.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ForestGreen),
-                                                contentPadding = PaddingValues(0.dp)
-                                            ) {
-                                                Text("Bu Adisyonu Tamamen Kapat (₺${"%.2f".format(order.remainingAmount())})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Financial Summary of Table
-                        Surface(
-                            color = ForestGreen,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("KALAN ÖDENECEK", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
-                                    Text("₺${"%.2f".format(remainingTotal)}", fontSize = 18.sp, color = WarmGold, fontWeight = FontWeight.Bold)
-                                }
-                                if (remainingTotal > 0) {
-                                    Button(
-                                        onClick = {
-                                            activeTableOrders.forEach { ord ->
-                                                if (!ord.isFullyPaid()) viewModel.payFullOrder(ord.id)
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text("Tüm Masayı Kapat ✨", color = ForestGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { selectedTableForDetail = null }) {
-                    Text("Kapat", fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -547,70 +286,47 @@ fun TableManagementScreen(
 }
 
 @Composable
-fun TableCard(
+fun TableQrCard(
     table: TableItem,
-    isOccupied: Boolean,
-    orderCount: Int,
-    totalUnpaid: Double,
-    onClick: () -> Unit,
     onShowQr: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onShowQr),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isOccupied) SoftMintGreen.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
-        ),
-        border = if (isOccupied) BorderStroke(1.5.dp, ForestGreen) else null,
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isOccupied) 4.dp else 1.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End
             ) {
-                Surface(
-                    color = if (isOccupied) ForestGreen else Slate500.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = if (isOccupied) "🟢 DOLU" else "⚪ BOŞ",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isOccupied) Color.White else Slate500,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-
                 IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(if (isOccupied) ForestGreen else ForestGreen.copy(alpha = 0.08f), CircleShape),
+                    .size(54.dp)
+                    .background(ForestGreen, RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isOccupied) Icons.Default.ReceiptLong else Icons.Default.QrCode2,
+                    imageVector = Icons.Default.QrCode2,
                     contentDescription = null,
-                    tint = if (isOccupied) WarmGold else ForestGreen,
-                    modifier = Modifier.size(26.dp)
+                    tint = WarmGold,
+                    modifier = Modifier.size(32.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = table.label,
@@ -619,52 +335,18 @@ fun TableCard(
                 color = ForestGreen
             )
 
-            if (isOccupied) {
-                Text(
-                    text = "₺${"%.2f".format(totalUnpaid)}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color(0xFFB45309)
-                )
-                Text(
-                    text = "$orderCount Sipariş",
-                    fontSize = 11.sp,
-                    color = SageGreen
-                )
-            } else {
-                Text(
-                    text = "Müsait",
-                    fontSize = 12.sp,
-                    color = Slate500
-                )
-            }
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Button(
+                onClick = onShowQr,
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                contentPadding = PaddingValues(0.dp)
             ) {
-                Button(
-                    onClick = onClick,
-                    modifier = Modifier.weight(1f).height(34.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isOccupied) ForestGreen else SageGreen
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text(if (isOccupied) "Hesap 💳" else "İncele", fontSize = 12.sp, color = WarmGold, fontWeight = FontWeight.Bold)
-                }
-
-                IconButton(
-                    onClick = onShowQr,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .background(ForestGreen.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                ) {
-                    Icon(Icons.Default.QrCode, contentDescription = "QR Kod", tint = ForestGreen, modifier = Modifier.size(18.dp))
-                }
+                Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp), tint = WarmGold)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("QR Kod", fontSize = 13.sp, color = WarmGold)
             }
         }
     }

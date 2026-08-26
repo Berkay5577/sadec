@@ -157,14 +157,7 @@ fun DashboardScreen(
             TopAppBar(
                 windowInsets = TopAppBarDefaults.windowInsets,
                 title = {
-                    Column {
-                        Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(
-                            text = "Haftalık Ciro: ₺${"%.2f".format(totalRevenue)}",
-                            fontSize = 12.sp,
-                            color = WarmGold
-                        )
-                    }
+                    Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -172,20 +165,26 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
-                    // Weekly Close & Mandatory PDF Download Action
-                    Button(
-                        onClick = {
-                            hasDownloadedPdf = false
-                            showWeeklyResetDialog = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = ForestGreen, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Haftayı Kapat 📅", color = ForestGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    IconButton(onClick = {
+                        com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                            context = context,
+                            orders = completedOrders,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            weekPeriod = currentWeekPeriod
+                        )
+                    }) {
+                        Icon(Icons.Default.FileDownload, contentDescription = "Excel İndir", tint = WarmGold)
+                    }
+
+                    IconButton(onClick = {
+                        WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
+                            context = context,
+                            orders = completedOrders,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            weekPeriod = currentWeekPeriod
+                        )
+                    }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF İndir", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -254,6 +253,14 @@ fun DashboardScreen(
                     orderCount = completedOrders.size,
                     totalItemsSold = totalItemsSold,
                     productStats = productStats,
+                    onExportExcel = {
+                        com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                            context = context,
+                            orders = completedOrders,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            weekPeriod = currentWeekPeriod
+                        )
+                    },
                     onExportPdf = {
                         WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
                             context = context,
@@ -261,6 +268,10 @@ fun DashboardScreen(
                             restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
                             weekPeriod = currentWeekPeriod
                         )
+                    },
+                    onTriggerWeeklyReset = {
+                        hasDownloadedPdf = false
+                        showWeeklyResetDialog = true
                     }
                 )
                 1 -> TableAnalyticsTab(
@@ -279,10 +290,10 @@ fun DashboardScreen(
         }
     }
 
-    // Mandatory Weekly Reset & PDF Download Dialog
+    // Mandatory Weekly Reset & Excel Download Dialog
     if (showWeeklyResetDialog) {
         AlertDialog(
-            onDismissRequest = { /* Zorunlu / dismiss edilemez veya kapat butonuyla kapatılır */ },
+            onDismissRequest = { /* Zorunlu / dismiss edilemez */ },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = WarmGold, modifier = Modifier.size(24.dp))
@@ -299,7 +310,7 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "⚠️ Veri kaybını önlemek ve muhasebe kayıtlarınızı korumak için, haftalık detaylı gelir raporunu PDF olarak indirmeniz ZORUNLUDUR.",
+                        text = "⚠️ Veri kaybını önlemek ve muhasebe kayıtlarınızı korumak için, siparişlerin tüm detaylarını (gün, saat, masa, müşteri, adet, tutar) içeren resmi Excel raporunu indirmeniz ZORUNLUDUR.",
                         fontSize = 12.sp,
                         color = Color(0xFFB45309),
                         lineHeight = 16.sp
@@ -321,10 +332,10 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Step 1: Download PDF Button
+                    // Step 1: Download Excel Button
                     Button(
                         onClick = {
-                            val file = WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
+                            val file = com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
                                 context = context,
                                 orders = activeWeeklyOrders,
                                 restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
@@ -340,13 +351,13 @@ fun DashboardScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = if (hasDownloadedPdf) SageGreen else ForestGreen)
                     ) {
                         Icon(
-                            imageVector = if (hasDownloadedPdf) Icons.Default.CheckCircle else Icons.Default.Download,
+                            imageVector = if (hasDownloadedPdf) Icons.Default.CheckCircle else Icons.Default.FileDownload,
                             contentDescription = null,
                             tint = WarmGold
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (hasDownloadedPdf) "1. Adım: PDF İndirildi ✅" else "1. Adım: Raporu İndir (PDF) 📥",
+                            text = if (hasDownloadedPdf) "1. Adım: Excel İndirildi ✅" else "1. Adım: Raporu İndir (Excel) 📥",
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -399,7 +410,9 @@ fun SalesAnalyticsTab(
     orderCount: Int,
     totalItemsSold: Int,
     productStats: List<ProductSaleStat>,
-    onExportPdf: () -> Unit
+    onExportExcel: () -> Unit,
+    onExportPdf: () -> Unit,
+    onTriggerWeeklyReset: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -452,33 +465,65 @@ fun SalesAnalyticsTab(
             }
         }
 
-        // Export PDF Quick Bar
+        // Report & Weekly Close Action Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
+                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("📄 Detaylı Rapor Dökümü", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 13.sp)
-                        Text("Tüm sipariş ve masa detaylarını içeren resmi PDF çıktısı alın.", fontSize = 11.sp, color = SageGreen)
-                    }
-                    Button(
-                        onClick = onExportPdf,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Download, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("PDF İndir", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("📊 Resmi Kasa & Satış Raporu", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 14.sp)
+                            Text("Tüm sipariş detaylarını (gün, saat, müşteri, masa, adet, tutar) içeren rapor dökümü alın.", fontSize = 11.sp, color = SageGreen)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onExportExcel,
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Excel İndir", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = onExportPdf,
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("PDF İndir", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = onTriggerWeeklyReset,
+                            modifier = Modifier.weight(1.2f).height(40.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("Haftayı Kapat 📅", color = ForestGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
