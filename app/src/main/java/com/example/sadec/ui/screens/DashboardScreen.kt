@@ -75,10 +75,10 @@ fun DashboardScreen(
 
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf(
-        "📊 Özet",
-        "📅 Günler",
-        "📍 Masalar",
-        "📜 Adisyonlar"
+        "Özet",
+        "Günler",
+        "Masalar",
+        "Adisyonlar"
     )
     var showManualCashSheet by remember { mutableStateOf(false) }
 
@@ -295,9 +295,9 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             listOf(
-                                Pair("☀️ Bugün", 0),
-                                Pair("📅 Bu Hafta", 1),
-                                Pair("🗄️ Geçmiş", 2)
+                                Pair("Bugün", 0),
+                                Pair("Bu Hafta", 1),
+                                Pair("Geçmiş", 2)
                             ).forEach { (title, idx) ->
                                 val isSelected = dateFilterIndex == idx
                                 Surface(
@@ -313,7 +313,7 @@ fun DashboardScreen(
                                     ) {
                                         Text(
                                             text = title,
-                                            fontSize = 12.sp,
+                                            fontSize = 13.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (isSelected) WarmGold else Slate500,
                                             maxLines = 1
@@ -326,7 +326,7 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Sabit 4'lü Tab Bar (Asla sağdan kesilmez veya taşmaz)
+                    // Sabit 4'lü Tab Bar (Sadece Temiz Metinler)
                     TabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = Color.Transparent,
@@ -342,7 +342,7 @@ fun DashboardScreen(
                                     Text(
                                         text = title,
                                         fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 13.5.sp,
                                         color = if (isTabSelected) ForestGreen else Slate500,
                                         maxLines = 1
                                     )
