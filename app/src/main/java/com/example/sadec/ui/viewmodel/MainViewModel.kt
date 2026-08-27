@@ -682,7 +682,9 @@ class MainViewModel @JvmOverloads constructor(
             val result = AppUpdateManager.downloadApk(context, apkUrl) { progress, downloadedMB, totalMB ->
                 _downloadProgress.value = progress
                 val percent = (progress * 100).toInt()
-                _downloadStatusText.value = "%$percent İndirildi (%.1f MB / %.1f MB)".format(downloadedMB, totalMB)
+                val downStr = "%.1f".format(java.util.Locale.US, downloadedMB)
+                val totStr = if (totalMB > 0) "%.1f MB".format(java.util.Locale.US, totalMB) else "..."
+                _downloadStatusText.value = "%$percent İndirildi ($downStr MB / $totStr)"
             }
 
             result.onSuccess { apkFile ->

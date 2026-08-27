@@ -53,6 +53,7 @@ object AppUpdateManager {
             val url = URL(apkUrl)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36")
             connection.connectTimeout = 20000
             connection.readTimeout = 45000
             connection.instanceFollowRedirects = true
