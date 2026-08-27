@@ -42,6 +42,21 @@ class FirestoreRepository {
         return rest
     }
 
+    fun listenRestaurant(restaurantId: String): Flow<Restaurant?> = callbackFlow {
+        val listener = db.collection("restaurants").document(restaurantId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    val rest = snapshot.toObject(Restaurant::class.java)?.copy(id = snapshot.id)
+                    trySend(rest)
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
     suspend fun updateRestaurantWebMenuUrl(restaurantId: String, webUrl: String): Result<Unit> {
         return try {
             val cleanUrl = webUrl.trim().removeSuffix("/")

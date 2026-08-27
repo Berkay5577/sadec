@@ -121,13 +121,20 @@ class MainViewModel @JvmOverloads constructor(
     private fun initDataListeners() {
         val restId = _restaurantId.value
 
-        // Load / Ensure Restaurant Doc
+        // Load & Listen Restaurant Doc (Realtime)
         viewModelScope.launch {
             try {
                 _restaurant.value = firestoreRepository.getOrCreateRestaurant(restId)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            firestoreRepository.listenRestaurant(restId)
+                .catch { e -> e.printStackTrace() }
+                .collect { rest ->
+                    if (rest != null) {
+                        _restaurant.value = rest
+                    }
+                }
         }
 
         // Listen Orders (Realtime)
@@ -513,6 +520,11 @@ class MainViewModel @JvmOverloads constructor(
 
     fun setPopupCampaignActive(isActive: Boolean) {
         viewModelScope.launch {
+            val currentRest = _restaurant.value
+            if (currentRest != null) {
+                val currentCampaign = currentRest.popupCampaign ?: PopupCampaign()
+                _restaurant.value = currentRest.copy(popupCampaign = currentCampaign.copy(isActive = isActive))
+            }
             val res = firestoreRepository.setPopupCampaignActive(_restaurantId.value, isActive)
             res.onSuccess {
                 if (isActive) {
@@ -542,6 +554,11 @@ class MainViewModel @JvmOverloads constructor(
                     _uiMessage.emit("Görsel yüklenemedi: ${it.localizedMessage}")
                     return@launch
                 }
+            }
+
+            val currentRest = _restaurant.value
+            if (currentRest != null) {
+                _restaurant.value = currentRest.copy(popupCampaign = finalCampaign)
             }
 
             val res = firestoreRepository.savePopupCampaign(_restaurantId.value, finalCampaign)
