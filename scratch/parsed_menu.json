@@ -1,0 +1,463 @@
+[
+  {
+    "slideId": "slide-hot",
+    "categoryName": "Sıcak Kahve & Sıcak İçecekler",
+    "bgImg": "images/hot_coffee.jpg",
+    "items": [
+      {
+        "name": "ESPRESSO",
+        "price": 100,
+        "description": "30ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "DOUBLE ESPRESSO",
+        "price": 120,
+        "description": "60ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "DOUBLE SHOT AMERİCANO",
+        "price": 140,
+        "description": "150ML SICAK SU VE 60ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "CAFFE LATTE",
+        "price": 170,
+        "description": "30ML ESPRESSO 150ML SICAK SÜT",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "CAPPUCİNO",
+        "price": 170,
+        "description": "30ML ESPRESSO 150ML SICAK SÜT VE SÜT KÖPÜĞÜ VE ÇİKOLATA TOZU",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "ESPRESSO MACCHİATO",
+        "price": 150,
+        "description": "30ML ESPRESSO VE BİR KAŞIK SÜT KÖPÜĞÜ",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "CARAMEL MACCHİATO",
+        "price": 160,
+        "description": "30ML ESPRESSO 180ML SÜT VE 30ML KARAMEL",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "MOCHA",
+        "price": 190,
+        "description": "30ML ESPRESSO 20GR ÇİKOLATA 130ML SÜT VE SÜT KREMASI",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "WHİTE CHOCOLATE MOCHA",
+        "price": 190,
+        "description": "30ML ESPRESSO 20GR BEYAZ ÇİKOLATA 130ML SÜT VE SÜT KREMASI",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "CORTADO",
+        "price": 160,
+        "description": "60ML ESPRESSO 60ML SÜT VE KREMASI",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "FLAT WHİTE",
+        "price": 170,
+        "description": "60ML ESPRESSO 120ML SICAK SÜT",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "BLACK EYE",
+        "price": 160,
+        "description": "180ML FİLTRE KAHVE VE 60ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "FİLTRE KAHVE  V60",
+        "price": 180,
+        "description": "KOLOMBİYA, SUMATRA, GUATEMALA BÖLGELERİNDEN ÇEKİRDEKLER İLE HAZIRLANIR",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "FİLTRE KAHVE MAKİNA",
+        "price": 120,
+        "description": "KOLOMBİYA KAHVESİ İLE HAZIRLANIR",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "SİYAH ÇAY",
+        "price": 30,
+        "description": "ADAÇAYI, HİBİSCUS, PAPATYA, MAÇA VB.",
+        "allergens": []
+      },
+      {
+        "name": "TÜRK KAHVESİ",
+        "price": 75,
+        "description": "ÇİFTE KAVRULMUŞ LOKUM VE SU İLE SERVİS EDİLİR",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "AFFAGATO",
+        "price": 250,
+        "description": "VANİLYALI DONDURMA VE 60ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "BEYAZ SICAK ÇİKOLATA",
+        "price": 180,
+        "description": "180ML SICAK SÜT VE ÇİKOLATA",
+        "allergens": [
+          "Süt"
+        ]
+      },
+      {
+        "name": "PEMBE RUBY SICAK ÇİKOLATA",
+        "price": 180,
+        "description": "180ML SICAK SÜT VE ÇİKOLATA",
+        "allergens": [
+          "Süt"
+        ]
+      },
+      {
+        "name": "SICAK ÇİKOLATA",
+        "price": 180,
+        "description": "180ML SICAK SÜT VE ÇİKOLATA",
+        "allergens": [
+          "Süt"
+        ]
+      }
+    ]
+  },
+  {
+    "slideId": "slide-ad1",
+    "categoryName": "Kategori",
+    "bgImg": "images/promo_molasi.jpg",
+    "items": []
+  },
+  {
+    "slideId": "slide-cold",
+    "categoryName": "Soğuk İçecekler",
+    "bgImg": "images/cold_drinks.jpg",
+    "items": [
+      {
+        "name": "İCE AMERİCANO",
+        "price": 150,
+        "description": "150 ML SOĞUK SU VE 60ML ESPRESSO",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "İCE LATTE",
+        "price": 180,
+        "description": "130ML SOĞUK SÜT 30ML ESPRESSO VE BUZ",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "İCE WHİTE CHOCOLATE MOCHA",
+        "price": 200,
+        "description": "30ML ESPRESSO 20GR BEYAZ ÇİKOLATA 130ML SOĞUK SÜT VE SÜT KREMASI BUZ",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "İCE MOCHA",
+        "price": 200,
+        "description": "30ML ESPRESSO 20GR ÇİKOLATA 130ML SOĞUK SÜT, SÜT KREMASI VE BUZ",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "İCE CARAMEL MACCHİATO",
+        "price": 190,
+        "description": "30ML ESPRESSO 180ML SOĞUK SÜT , 30ML KARAMEL VE BUZ",
+        "allergens": [
+          "Süt",
+          "Kafein"
+        ]
+      },
+      {
+        "name": "FRAPELER",
+        "price": 180,
+        "description": "ÇİLEKLİ, MUZLU, KAKAOLU, KARPUZLU, YEŞİL ELMALI, MANGOLU VB.",
+        "allergens": [
+          "Süt"
+        ]
+      },
+      {
+        "name": "COLD BREW",
+        "price": 180,
+        "description": "SOĞUK DEM COLOMBİYA KAHVESİ",
+        "allergens": [
+          "Kafein"
+        ]
+      },
+      {
+        "name": "LİMONATA",
+        "price": 160,
+        "description": "EV YAPIMI 200ML BARDAKTA VE BUZ",
+        "allergens": []
+      },
+      {
+        "name": "ERİK SUYU",
+        "price": 180,
+        "description": "EV YAPIMI 200ML BARDAKTA VE BUZ",
+        "allergens": []
+      },
+      {
+        "name": "İCE HİBİSCUS ÇAYI",
+        "price": 200,
+        "description": "BUZ VE HİBİSCUS ÇAYI",
+        "allergens": []
+      },
+      {
+        "name": "MUZLU MİLKSHAKE",
+        "price": 200,
+        "description": "200ML",
+        "allergens": []
+      },
+      {
+        "name": "MANGOLU MİLKSHAKE",
+        "price": 200,
+        "description": "200ML",
+        "allergens": []
+      },
+      {
+        "name": "ÇİLEKLİ MİLKSHAKE",
+        "price": 200,
+        "description": "200ML",
+        "allergens": []
+      },
+      {
+        "name": "ÇİKOLATALI MİLKSHAKE",
+        "price": 200,
+        "description": "200ML",
+        "allergens": []
+      }
+    ]
+  },
+  {
+    "slideId": "slide-ad2",
+    "categoryName": "Kategori",
+    "bgImg": "images/promo_sandwich.jpg",
+    "items": []
+  },
+  {
+    "slideId": "slide-snack",
+    "categoryName": "Atıştırmalıklar",
+    "bgImg": "images/snacks.jpg",
+    "items": [
+      {
+        "name": "Üç Peynirli Bazlama Tost175₺",
+        "price": 175,
+        "description": "Dana sucuk, kaşar peyniri",
+        "allergens": [
+          "Süt",
+          "Gluten"
+        ]
+      },
+      {
+        "name": "Mücver(dipsoslu)150₺",
+        "price": 60,
+        "description": "Ev yapımı yufka, yerli ürünler",
+        "allergens": [
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "Peynirli Börek60₺",
+        "price": 60,
+        "description": "Ev yapımı yufka, soğan, patates, baharat",
+        "allergens": [
+          "Süt",
+          "Gluten"
+        ]
+      },
+      {
+        "name": "Dereotlu Poğaça50₺",
+        "price": 80,
+        "description": "Ezine peyniri, yumurta, maydanoz, kekik\r\n                  · 25dk hazırlanır",
+        "allergens": [
+          "Süt",
+          "Gluten",
+          "Yumurta"
+        ]
+      }
+    ]
+  },
+  {
+    "slideId": "slide-ad3",
+    "categoryName": "Kategori",
+    "bgImg": "images/promo_cheesecake.jpg",
+    "items": []
+  },
+  {
+    "slideId": "slide-dessert",
+    "categoryName": "Tatlılar",
+    "bgImg": "images/desserts.jpg",
+    "items": [
+      {
+        "name": "AMERİKAN CREAMY NEMLİ KEK",
+        "price": 180,
+        "description": "BOL KAKAOLU YUMUŞAK KEK VE ÖZEL KAKAOLU KREMASI İLE",
+        "allergens": [
+          "Süt",
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "LECHES",
+        "price": 200,
+        "description": "MASCARPONE VE KREMA İLE ÖRTÜLMÜS SÜT REÇELLİ KEK",
+        "allergens": [
+          "Süt",
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "CUP CAKES",
+        "price": 60,
+        "description": "LİMONLU VE ÇİKOLATALI VS.",
+        "allergens": [
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "ÇİLEKLİ VS. KAP PASTA",
+        "price": 200,
+        "description": "ÇİKOLATA PRALİN VE SÜT",
+        "allergens": [
+          "Süt",
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "TİRAMİSU",
+        "price": 200,
+        "description": "MASCARPONE VE KREMA İLE HAZIRLANMIŞ ORJİNAL HARÇ VE KEDİ DİLLERİ",
+        "allergens": [
+          "Süt"
+        ]
+      },
+      {
+        "name": "ELMALI KRAMBLE(CRUMBLE)",
+        "price": 190,
+        "description": "ELMA VE ÜST ÇITIR ÖRTÜSÜ İLE SUNULAN KEK",
+        "allergens": [
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "BROWNİ",
+        "price": 190,
+        "description": "ÇİKOLATA TERYAĞI UN CEVİZ VE FINDIK İÇİ",
+        "allergens": [
+          "Gluten"
+        ]
+      },
+      {
+        "name": "ÇOK ÇİKOLATALI KEK",
+        "price": 180,
+        "description": "ÇİKOLATA ESPRESSO KAHVE TEREYAĞI VS. ÖZEL ÇİKOLATA SOS İLE",
+        "allergens": [
+          "Kafein",
+          "Gluten",
+          "Yumurta"
+        ]
+      },
+      {
+        "name": "CHEESCAKE",
+        "price": 120,
+        "description": "franbuazlı,  ÇİKOLATALI, LİMONLU VE VİŞNELİ",
+        "allergens": []
+      }
+    ]
+  },
+  {
+    "slideId": "slide-special",
+    "categoryName": "Spesiyeller",
+    "bgImg": "images/promo_sandwich.jpg",
+    "items": [
+      {
+        "name": "Köfte Sandviç",
+        "price": 260,
+        "description": "Cibata Ekmeği, Çıtır Dışı Yumuşak İçi, Köfte, Mozzarella\r\n                  Peyniri, Karamelize Soğan, Közlenmiş Kapya Biber, Özel Soslar",
+        "allergens": [
+          "Süt",
+          "Gluten"
+        ]
+      },
+      {
+        "name": "Tavuk Sandviç",
+        "price": 260,
+        "description": "Cibata Ekmeği, Çıtır Dışı Yumuşak İçi, Özel Pişmiş Izgara\r\n                  Tavuk, Yeşillik, Özel Soslar",
+        "allergens": [
+          "Gluten"
+        ]
+      }
+    ]
+  },
+  {
+    "slideId": "slide-8",
+    "categoryName": "Kategori",
+    "bgImg": "",
+    "items": []
+  }
+]
