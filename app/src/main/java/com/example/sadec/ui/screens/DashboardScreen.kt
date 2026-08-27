@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -241,22 +242,34 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Filter Chips Bar (GÜN ÖZETİ & HAFTALIK ÖZET SEÇİMİ)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            // Filter Chips Bar (GÜN ÖZETİ & HAFTALIK ÖZET SEÇİMİ - YATAY KAYDIRILABİLİR)
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(
+                val filterList = listOf(
                     "☀️ Gün Özeti (Bugün)",
                     "📅 Haftalık Özet (Bu Hafta)",
                     "🗄️ Tüm Geçmiş"
-                ).forEachIndexed { idx, title ->
+                )
+                items(filterList) { title ->
+                    val idx = when (title) {
+                        "☀️ Gün Özeti (Bugün)" -> 0
+                        "📅 Haftalık Özet (Bu Hafta)" -> 1
+                        else -> 2
+                    }
                     FilterChip(
                         selected = dateFilterIndex == idx,
                         onClick = { dateFilterIndex = idx },
-                        label = { Text(title, fontSize = 12.sp, fontWeight = if (dateFilterIndex == idx) FontWeight.Bold else FontWeight.Normal) },
+                        label = {
+                            Text(
+                                text = title,
+                                fontSize = 12.5.sp,
+                                fontWeight = if (dateFilterIndex == idx) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1
+                            )
+                        },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = ForestGreen,
                             selectedLabelColor = WarmGold
