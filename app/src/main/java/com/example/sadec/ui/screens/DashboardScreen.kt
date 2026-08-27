@@ -1515,22 +1515,22 @@ fun ManualCashEntryTab(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text("Masa Seçin:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Text("Masa / Konum:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
-                        tables.take(4).forEach { table ->
-                            FilterChip(
-                                selected = selectedTableId == table.id,
-                                onClick = {
-                                    selectedTableId = table.id
-                                    selectedTableLabel = table.label
-                                },
-                                label = { Text(table.label, fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ForestGreen, selectedLabelColor = WarmGold)
+                        FilterChip(
+                            selected = true,
+                            onClick = {
+                                selectedTableId = "table-kasa"
+                                selectedTableLabel = "KASA"
+                            },
+                            label = { Text("🏢 KASA", fontSize = 11.5.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = ForestGreen,
+                                selectedLabelColor = WarmGold
                             )
-                        }
+                        )
                     }
                 }
             }
