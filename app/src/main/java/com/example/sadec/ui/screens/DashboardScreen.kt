@@ -801,30 +801,18 @@ fun SalesAnalyticsTab(
             }
         }
 
-        // Section Title: En Çok Satan Ürünler
-        item {
-            Text(
-                text = "ÜRÜN BAZLI SATIŞ ADETLERİ & CİRO",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = Slate500
-            )
-        }
-
-        if (productStats.isEmpty()) {
+        // Section: Ürün Satışları (Sadece satış varsa gösterilir)
+        if (productStats.isNotEmpty()) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("Bu dönemde henüz tamamlanmış ürün satışı bulunmuyor.", color = Slate500, fontSize = 13.sp)
-                    }
-                }
+                Text(
+                    text = "ÜRÜN BAZLI SATIŞ ADETLERİ & CİRO",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = Slate500
+                )
             }
-        } else {
+
             items(productStats) { stat ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
