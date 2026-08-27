@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Add
 import com.example.sadec.data.model.Order
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
@@ -29,8 +31,12 @@ fun OrdersScreen(
     onOrderClick: (Order) -> Unit
 ) {
     val orders by viewModel.orders.collectAsState()
+    val menuItems by viewModel.menuItems.collectAsState()
+    val tables by viewModel.tables.collectAsState()
     val filter by viewModel.selectedStatusFilter.collectAsState()
     val restaurant by viewModel.restaurant.collectAsState()
+
+    var showManualCashSheet by remember { mutableStateOf(false) }
 
     // Varsayılan görünüm: Sadece aktif (teslim edilmemiş ve iptal edilmemiş) siparişleri gösterir
     val unarchivedOrders = remember(orders) { orders.filter { !it.isArchived } }
@@ -89,6 +95,22 @@ fun OrdersScreen(
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showManualCashSheet = true },
+                containerColor = ForestGreen,
+                contentColor = WarmGold,
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Manuel Kasa Satışı",
+                    modifier = Modifier.size(28.dp),
+                    tint = WarmGold
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -122,12 +144,14 @@ fun OrdersScreen(
                             text = if (filter == "all") "Bekleyen aktif sipariş yok 🎉" else "Bu kategoride sipariş bulunmuyor",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = ForestGreen
+                            color = ForestGreen,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                         Text(
                             text = "Müşteriler QR menüyü okutup sipariş verdiğinde anlık olarak burada listelenecektir.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Slate500,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -152,6 +176,23 @@ fun OrdersScreen(
                     }
                 }
             }
+        }
+    }
+
+    // ➕ MANUEL KASA SATIŞI BOTTOM SHEET
+    if (showManualCashSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showManualCashSheet = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            ManualCashEntryTab(
+                menuItems = menuItems,
+                tables = tables,
+                onSaveManualOrder = { order ->
+                    viewModel.createManualOrder(order)
+                    showManualCashSheet = false
+                }
+            )
         }
     }
 
