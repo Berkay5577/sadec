@@ -84,7 +84,7 @@ class OrderBackgroundService : Service() {
             notificationManager.createNotificationChannel(serviceChannel)
 
             // 2. Yüksek Öncelikli Yeni Sipariş Uyarısı (Ekranı uyandıran, kilit ekranında görünen)
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val soundUri = SoundPlayer.getOrderSoundUri(this)
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_ALARM)
@@ -92,10 +92,10 @@ class OrderBackgroundService : Service() {
 
             val alertChannel = NotificationChannel(
                 CHANNEL_ORDER_ALERT_ID,
-                "Yeni Sipariş Uyarıları (Yüksek Öncelik)",
+                "Yeni Sipariş Uyarıları (Ring of Silence)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Yeni masa siparişlerinde çalan yüksek sesli kilit ekranı uyarısı"
+                description = "Yeni masa siparişlerinde çalan Ring of Silence kilit ekranı uyarısı"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 800)
                 setSound(soundUri, audioAttributes)
@@ -209,7 +209,7 @@ class OrderBackgroundService : Service() {
             "₺${"%.2f".format(order.totalPrice)} tutarında yeni sipariş geldi."
         }
 
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val soundUri = SoundPlayer.getOrderSoundUri(this)
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ORDER_ALERT_ID)
             .setSmallIcon(R.mipmap.ic_launcher)

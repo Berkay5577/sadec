@@ -77,7 +77,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val soundUri = SoundPlayer.getOrderSoundUri(this)
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_ALARM)
@@ -85,7 +85,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             val channel = NotificationChannel(
                 channelId,
-                "Sipariş Bildirimleri (Kilit Ekranı)",
+                "Sipariş Bildirimleri (Ring of Silence)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Yeni gelen masa siparişleri için anlık yüksek sesli uyarılar"
@@ -110,6 +110,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val soundUri = SoundPlayer.getOrderSoundUri(this)
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
@@ -121,6 +123,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setFullScreenIntent(pendingIntent, true)
             .setContentIntent(pendingIntent)
+            .setSound(soundUri)
             .setVibrate(longArrayOf(0, 500, 200, 500, 200, 800))
             .build()
 
