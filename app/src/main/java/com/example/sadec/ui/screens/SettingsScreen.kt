@@ -683,17 +683,11 @@ fun SettingsScreen(
                 }
             }
 
-            // 5. 🚀 UYGULAMA SÜRÜMÜ & GÜNCELLEMELER KARTI
+            // 5. 🚀 UYGULAMA SÜRÜMÜ KARTI (Salt Okunur / Güncelleme Bildirimi)
             val appUpdateInfo = restaurant?.appUpdateInfo
             val currentVersionName = BuildConfig.VERSION_NAME
             val currentVersionCode = BuildConfig.VERSION_CODE
             val hasUpdate = appUpdateInfo != null && AppUpdateManager.isUpdateAvailable(appUpdateInfo.latestVersionCode)
-
-            var isPublishUpdateSectionExpanded by remember { mutableStateOf(false) }
-            var newVersionNameInput by remember { mutableStateOf(appUpdateInfo?.latestVersionName ?: "1.1.0") }
-            var newVersionCodeInput by remember { mutableStateOf((appUpdateInfo?.latestVersionCode ?: 1).plus(1).toString()) }
-            var newApkUrlInput by remember { mutableStateOf(appUpdateInfo?.apkUrl ?: "") }
-            var newReleaseNotesInput by remember { mutableStateOf(appUpdateInfo?.releaseNotes ?: "") }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -731,7 +725,7 @@ fun SettingsScreen(
                                     color = ForestGreen
                                 )
                                 Text(
-                                    text = "Kurulu: v$currentVersionName (Yapı $currentVersionCode)",
+                                    text = "Kurulu Sürüm: v$currentVersionName (Yapı $currentVersionCode)",
                                     fontSize = 12.sp,
                                     color = Slate500
                                 )
@@ -768,94 +762,11 @@ fun SettingsScreen(
                         text = if (hasUpdate)
                             "Yeni bir sürüm mevcut (v${appUpdateInfo?.latestVersionName}). Tek tıkla kablosuz güncelleyebilirsiniz."
                         else
-                            "Uygulamanız en son Sade.C özellikleri ve geliştirmeleriyle güncel durumdadır.",
+                            "Uygulamanız en güncel sürümde çalışmaktadır.",
                         fontSize = 12.sp,
                         color = Slate500,
                         lineHeight = 16.sp
                     )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Admin Sürüm Yayınlama Paneli
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isPublishUpdateSectionExpanded = !isPublishUpdateSectionExpanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (isPublishUpdateSectionExpanded) "🔼 Güncelleme Panelini Gizle" else "⚙️ Yeni Sürüm Duyur / Güncelleme Yayınla",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SageGreen
-                        )
-                        Icon(
-                            imageVector = if (isPublishUpdateSectionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = null,
-                            tint = SageGreen,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    if (isPublishUpdateSectionExpanded) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = newVersionNameInput,
-                            onValueChange = { newVersionNameInput = it },
-                            label = { Text("Yeni Sürüm Adı (Örn: 1.1.0)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = newVersionCodeInput,
-                            onValueChange = { newVersionCodeInput = it },
-                            label = { Text("Yeni Sürüm Kodu (Örn: 2)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = newApkUrlInput,
-                            onValueChange = { newApkUrlInput = it },
-                            label = { Text("APK İndirme Linki (Direct URL)") },
-                            placeholder = { Text("https://.../sadec.apk") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = newReleaseNotesInput,
-                            onValueChange = { newReleaseNotesInput = it },
-                            label = { Text("Sürüm Notları (Neler Yeni?)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                val code = newVersionCodeInput.toIntOrNull() ?: (currentVersionCode + 1)
-                                val info = AppUpdateInfo(
-                                    latestVersionCode = code,
-                                    latestVersionName = newVersionNameInput.trim().ifBlank { "1.1.0" },
-                                    apkUrl = newApkUrlInput.trim(),
-                                    releaseNotes = newReleaseNotesInput.trim()
-                                )
-                                viewModel.publishAppUpdate(info) {
-                                    isPublishUpdateSectionExpanded = false
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
-                        ) {
-                            Text("Tüm Cihazlara Güncelleme Gönder 🚀", color = WarmGold, fontWeight = FontWeight.Bold)
-                        }
-                    }
                 }
             }
 
