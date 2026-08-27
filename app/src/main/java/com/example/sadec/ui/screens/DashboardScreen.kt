@@ -1,7 +1,6 @@
 package com.example.sadec.ui.screens
 
 import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -74,9 +74,15 @@ fun DashboardScreen(
     val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("📊 Satış Analizi", "📅 Gün Gün Kasa", "🏢 Masa Analizi", "📜 Satış Geçmişi", "➕ Kasa Girişi")
+    val tabs = listOf(
+        Pair("📊 Genel Analiz", Icons.Default.Analytics),
+        Pair("📅 Gün Gün Kasa", Icons.Default.CalendarViewWeek),
+        Pair("📍 Masalar", Icons.Default.TableBar),
+        Pair("📜 Adisyonlar", Icons.Default.ReceiptLong),
+        Pair("➕ Manuel Satış", Icons.Default.PointOfSale)
+    )
 
-    // Weekly Period Label (e.g. 2026-W35)
+    // Weekly Period Label
     val cal = Calendar.getInstance()
     val currentWeekYear = cal.get(Calendar.YEAR)
     val currentWeekNum = cal.get(Calendar.WEEK_OF_YEAR)
@@ -85,17 +91,12 @@ fun DashboardScreen(
     val sdfDateKey = SimpleDateFormat("dd.MM.yyyy", Locale("tr", "TR"))
     val todayDateStr = sdfDateKey.format(Date())
 
-    // Weekly Close Dialog State
+    // Dialog states
     var showWeeklyResetDialog by remember { mutableStateOf(false) }
     var hasDownloadedPdf by remember { mutableStateOf(false) }
-
-    // Z-Report Close Confirmation Dialog State
     var showZReportConfirmDialog by remember { mutableStateOf(false) }
 
-    // Date Filter Index:
-    // 0: ☀️ Gün Özeti (Bugünün Açık Kasası - isDayClosed = false)
-    // 1: 📅 Haftalık Özet (Bu Hafta - Gün Gün Döküm Dahil)
-    // 2: 🗄️ Tüm Geçmiş & Arşiv
+    // Date Filter Index: 0: Gün Özeti (Bugün), 1: Haftalık Özet, 2: Tüm Geçmiş
     var dateFilterIndex by remember { mutableStateOf(0) }
 
     val displayedOrders = remember(orders, dateFilterIndex) {
@@ -106,7 +107,7 @@ fun DashboardScreen(
         }
     }
 
-    // Active unarchived completed orders for this week (always for weekly reset/export)
+    // Active unarchived completed orders for this week
     val activeWeeklyOrders = remember(orders) {
         orders.filter { !it.isArchived && it.status != "cancelled" && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }
     }
@@ -135,6 +136,10 @@ fun DashboardScreen(
         completedOrders.sumOf { order ->
             order.items.sumOf { it.quantity }
         }
+    }
+
+    val avgPerTable = remember(completedOrders, totalRevenue) {
+        if (completedOrders.isNotEmpty()) totalRevenue / completedOrders.size else 0.0
     }
 
     // Product Sales Stats
@@ -198,7 +203,20 @@ fun DashboardScreen(
             TopAppBar(
                 windowInsets = TopAppBarDefaults.windowInsets,
                 title = {
-                    Text("Satış Dashboard & Raporlar", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                    Column {
+                        Text(
+                            text = "Kasa & Finansal Dashboard",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 17.sp
+                        )
+                        Text(
+                            text = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            color = WarmGold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -214,7 +232,15 @@ fun DashboardScreen(
                             weekPeriod = currentWeekPeriod
                         )
                     }) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Haftalık Excel İndir", tint = WarmGold)
+                        Surface(
+                            color = SageGreen,
+                            shape = CircleShape,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.FileDownload, contentDescription = "Excel", tint = WarmGold, modifier = Modifier.size(18.dp))
+                            }
+                        }
                     }
 
                     IconButton(onClick = {
@@ -225,7 +251,15 @@ fun DashboardScreen(
                             weekPeriod = currentWeekPeriod
                         )
                     }) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Haftalık PDF İndir", tint = Color.White)
+                        Surface(
+                            color = SageGreen,
+                            shape = CircleShape,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -241,75 +275,100 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(Color(0xFFFBF8F3))
         ) {
-            // Filter Chips Bar (GÜN ÖZETİ & HAFTALIK ÖZET SEÇİMİ - YATAY KAYDIRILABİLİR)
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // 🌟 MODERN SEGMENTED PERIOD CONTROL
+            Surface(
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                val filterList = listOf(
-                    "☀️ Gün Özeti (Bugün)",
-                    "📅 Haftalık Özet (Bu Hafta)",
-                    "🗄️ Tüm Geçmiş"
-                )
-                items(filterList) { title ->
-                    val idx = when (title) {
-                        "☀️ Gün Özeti (Bugün)" -> 0
-                        "📅 Haftalık Özet (Bu Hafta)" -> 1
-                        else -> 2
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    // Segmented Button Bar
+                    Surface(
+                        color = Color(0xFFF1F5F3),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(4.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(
+                                Pair("☀️ Bugün", 0),
+                                Pair("📅 Bu Hafta", 1),
+                                Pair("🗄️ Tüm Geçmiş", 2)
+                            ).forEach { (title, idx) ->
+                                val isSelected = dateFilterIndex == idx
+                                Surface(
+                                    color = if (isSelected) ForestGreen else Color.Transparent,
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { dateFilterIndex = idx }
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = title,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) WarmGold else Slate500
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-                    FilterChip(
-                        selected = dateFilterIndex == idx,
-                        onClick = { dateFilterIndex = idx },
-                        label = {
-                            Text(
-                                text = title,
-                                fontSize = 12.5.sp,
-                                fontWeight = if (dateFilterIndex == idx) FontWeight.Bold else FontWeight.Normal,
-                                maxLines = 1
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = ForestGreen,
-                            selectedLabelColor = WarmGold
-                        ),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                }
-            }
 
-            // Tabs
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = ForestGreen,
-                edgePadding = 16.dp,
-                divider = {}
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = {
-                            Text(
-                                text = title,
-                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedTab == index) ForestGreen else Slate500
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Secondary Sub-Tabs (Scrollable)
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.Transparent,
+                        contentColor = ForestGreen,
+                        edgePadding = 0.dp,
+                        divider = {}
+                    ) {
+                        tabs.forEachIndexed { index, (title, icon) ->
+                            val isTabSelected = selectedTab == index
+                            Tab(
+                                selected = isTabSelected,
+                                onClick = { selectedTab = index },
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (isTabSelected) ForestGreen else Slate500
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = title,
+                                            fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.5.sp,
+                                            color = if (isTabSelected) ForestGreen else Slate500
+                                        )
+                                    }
+                                }
                             )
                         }
-                    )
+                    }
                 }
             }
 
-            HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
-
+            // Tab Content
             when (selectedTab) {
                 0 -> SalesAnalyticsTab(
                     dateFilterIndex = dateFilterIndex,
                     totalRevenue = totalRevenue,
                     orderCount = completedOrders.size,
                     totalItemsSold = totalItemsSold,
+                    avgPerTable = avgPerTable,
                     cardTotal = cardTotal,
                     cashTotal = cashTotal,
                     transferTotal = transferTotal,
@@ -366,8 +425,12 @@ fun DashboardScreen(
                 onDismissRequest = { showZReportConfirmDialog = false },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🌙", fontSize = 20.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(color = ForestGreen, shape = CircleShape, modifier = Modifier.size(36.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🌙", fontSize = 18.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Gün Sonu Z-Raporu & Kapanış",
                             fontWeight = FontWeight.Bold,
@@ -379,7 +442,7 @@ fun DashboardScreen(
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Bugünün Z-Raporunu PDF olarak çıkartıp bugünkü günü kapatmayı onaylıyor musunuz?",
+                            text = "Bugünün Z-Raporunu PDF olarak çıkartıp bugünkü kasayı kapatmayı onaylıyor musunuz?",
                             fontSize = 13.sp,
                             color = Slate500,
                             lineHeight = 18.sp
@@ -388,33 +451,33 @@ fun DashboardScreen(
 
                         Surface(
                             color = SoftMintGreen,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Bugünün Kasa Özeti ($todayDateStr):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("• Net Günlük Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                                Text("• Kredi Kartı / POS: ₺${"%.2f".format(cardTotal)}", fontSize = 12.sp, color = ForestGreen)
-                                Text("• Nakit Kasa: ₺${"%.2f".format(cashTotal)}", fontSize = 12.sp, color = Color(0xFF166534))
-                                if (transferTotal > 0) Text("• Havale/EFT: ₺${"%.2f".format(transferTotal)}", fontSize = 12.sp, color = Color(0xFF1E40AF))
-                                if (complimentaryTotal > 0) Text("• İkram/İndirim: ₺${"%.2f".format(complimentaryTotal)}", fontSize = 12.sp, color = Color(0xFF92400E))
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("Bugünün Kasa Mutabakatı ($todayDateStr):", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = ForestGreen)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("• Net Günlük Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                Text("• 💳 Kredi Kartı: ₺${"%.2f".format(cardTotal)}", fontSize = 12.5.sp, color = ForestGreen)
+                                Text("• 💵 Nakit Kasa: ₺${"%.2f".format(cashTotal)}", fontSize = 12.5.sp, color = Color(0xFF166534))
+                                if (transferTotal > 0) Text("• 📲 Havale/EFT: ₺${"%.2f".format(transferTotal)}", fontSize = 12.5.sp, color = Color(0xFF1E40AF))
+                                if (complimentaryTotal > 0) Text("• 🎁 İkram/İndirim: ₺${"%.2f".format(complimentaryTotal)}", fontSize = 12.5.sp, color = Color(0xFF92400E))
                                 Text("• Toplam Adisyon: ${completedOrders.size} Adet ($totalItemsSold Ürün)", fontSize = 12.sp, color = SageGreen)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         Surface(
                             color = Color(0xFFFEF3C7),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text("ℹ️", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Onaylandığında; Gün Özeti, günün masa analizi ve satış geçmişi yeni güne sıfırlanır. Tüm veriler Haftalık Raporda eksiksiz kalmaya devam eder.",
+                                    text = "Onaylandığında; Gün Özeti ve günün masa analizi yeni güne sıfırlanır. Tüm veriler Haftalık Raporda ve arşivde eksiksiz olarak kalmaya devam eder.",
                                     fontSize = 11.sp,
                                     color = Color(0xFF92400E),
                                     lineHeight = 15.sp
@@ -426,7 +489,6 @@ fun DashboardScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            // 1. Generate and share Daily Z-Report PDF
                             DailyZReportPdfGenerator.generateAndShareDailyZReportPdf(
                                 context = context,
                                 orders = completedOrders,
@@ -434,12 +496,12 @@ fun DashboardScreen(
                                 tableStats = tableStats,
                                 restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
                             )
-                            // 2. Close day in Firestore / ViewModel
                             viewModel.closeDailyZReport(todayDateStr) {
                                 showZReportConfirmDialog = false
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Text("Z-Raporunu Al & Günü Kapat ✨", color = WarmGold, fontWeight = FontWeight.Bold)
                     }
@@ -452,7 +514,7 @@ fun DashboardScreen(
             )
         }
 
-        // 🛡️ HAFTALIK KASA KAPATMA VE RAPOR İNDİRME ZORUNLU DİYALOĞU
+        // 🛡️ HAFTALIK KASA KAPATMA DİYALOĞU
         if (showWeeklyResetDialog) {
             AlertDialog(
                 onDismissRequest = { showWeeklyResetDialog = false },
@@ -491,7 +553,6 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Step 1: Download Excel Button
                         Button(
                             onClick = {
                                 ExcelReportGenerator.generateAndShareExcelReport(
@@ -521,7 +582,6 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Step 2: Reset Week Button (Disabled until Step 1 complete)
                         Button(
                             onClick = {
                                 viewModel.archiveWeeklyOrders(currentWeekPeriod) {
@@ -559,7 +619,7 @@ fun DashboardScreen(
 }
 
 // -------------------------------------------------------------
-// TAB 0: SALES & PRODUCT ANALYTICS
+// TAB 0: SALES & PRODUCT ANALYTICS (PREMIUM REDESIGNED)
 // -------------------------------------------------------------
 @Composable
 fun SalesAnalyticsTab(
@@ -567,6 +627,7 @@ fun SalesAnalyticsTab(
     totalRevenue: Double,
     orderCount: Int,
     totalItemsSold: Int,
+    avgPerTable: Double,
     cardTotal: Double,
     cashTotal: Double,
     transferTotal: Double,
@@ -577,146 +638,220 @@ fun SalesAnalyticsTab(
     onOpenZReportConfirm: () -> Unit,
     onTriggerWeeklyReset: () -> Unit
 ) {
-    val periodTitle = when (dateFilterIndex) {
-        0 -> "BUGÜNKÜ CİRO"
-        1 -> "HAFTALIK CİRO"
-        else -> "TOPLAM CİRO"
+    val periodLabel = when (dateFilterIndex) {
+        0 -> "BUGÜNÜN NET CİROSU"
+        1 -> "BU HAFTANIN GENEL CİROSU"
+        else -> "TÜM GEÇMİŞ DÖNEM CİROSU"
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // KPI Summary Cards
+        // 🌟 1. HERO FINANCIAL HEADER CARD
         item {
-            Row(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = ForestGreen),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = ForestGreen)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(ForestGreen, Color(0xFF264A3D), Color(0xFF1E3A2F))
+                            )
+                        )
+                        .padding(20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(periodTitle, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("₺${"%.2f".format(totalRevenue)}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                    }
-                }
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = periodLabel,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = Color.White.copy(alpha = 0.75f)
+                            )
+                            Surface(
+                                color = WarmGold.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(modifier = Modifier.size(6.dp).background(WarmGold, CircleShape))
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Canlı Kasa",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WarmGold
+                                    )
+                                }
+                            }
+                        }
 
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("ADİSYON", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Slate500)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("$orderCount Adet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
-                    }
-                }
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("SATILAN ÜRÜN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Slate500)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("$totalItemsSold Adet", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SageGreen)
+                        // Big Revenue Text
+                        Text(
+                            text = "₺${"%.2f".format(totalRevenue)}",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = WarmGold,
+                            letterSpacing = (-0.5).sp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Embedded Sub-metrics in pills
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)) {
+                                    Text("Adisyon", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f))
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("$orderCount Adet", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+
+                            Surface(
+                                color = Color.White.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)) {
+                                    Text("Satılan Ürün", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f))
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("$totalItemsSold Ürün", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+
+                            Surface(
+                                color = Color.White.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)) {
+                                    Text("Ort. Masa", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f))
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("₺${"%.0f".format(avgPerTable)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // 💳 ÖDEME YÖNTEMLERİ DAĞILIMI (KASA AYRIMI)
+        // 💳 2. PAYMENT METHODS BREAKDOWN
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.15f))
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("ÖDEME YÖNTEMLERİ DAĞILIMI (KASA)", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = ForestGreen)
-                    Spacer(modifier = Modifier.height(10.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "ÖDEME & TAHSİLAT DAĞILIMI",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp,
+                        color = ForestGreen
+                    )
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         // Kredi Kartı
                         Surface(
-                            color = SoftMintGreen,
-                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF0FDF4),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDCFCE7)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("💳", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Kredi Kartı", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
+                                    Text("💳", fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Kredi Kartı", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("₺${"%.2f".format(cardTotal)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("₺${"%.2f".format(cardTotal)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
                             }
                         }
 
                         // Nakit
                         Surface(
                             color = Color(0xFFF0FDF4),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDCFCE7)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("💵", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Nakit Kasa", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF166534))
+                                    Text("💵", fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Nakit Kasa", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF166534))
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("₺${"%.2f".format(cashTotal)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("₺${"%.2f".format(cashTotal)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Havale / EFT
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Havale / FAST
                         Surface(
                             color = Color(0xFFEFF6FF),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDBEAFE)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("📲", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Havale/EFT", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E40AF))
+                                    Text("📲", fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Havale/EFT", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E40AF))
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("₺${"%.2f".format(transferTotal)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("₺${"%.2f".format(transferTotal)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
                             }
                         }
 
-                        // İkram / İndirim
+                        // İkram & İndirim
                         Surface(
                             color = Color(0xFFFEF3C7),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("🎁", fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("İkram/İndirim", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
+                                    Text("🎁", fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("İkram/İndirim", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("₺${"%.2f".format(complimentaryTotal)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("₺${"%.2f".format(complimentaryTotal)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
                             }
                         }
                     }
@@ -724,92 +859,113 @@ fun SalesAnalyticsTab(
             }
         }
 
-        // Report & Quick Action Buttons Card
+        // 🌟 3. OFFICIAL ACTIONS & REPORTING CENTER
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
-                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.2f))
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("📊 Resmi Raporlama & Z-Raporu", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 14.sp)
-                    Text("Gün sonu Z-Raporunu PDF alarak günü kapatabilir veya haftalık dökümü Excel/PDF olarak çıkartabilirsiniz.", fontSize = 11.sp, color = SageGreen)
+                    Text(
+                        text = "RESMİ KASA İŞLEMLERİ & RAPORLAR",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp,
+                        color = ForestGreen
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Row 1: Excel & PDF (Haftalık / Genel)
+                    // PRIMARY HERO BUTTON: Gün Sonu Z-Raporu
+                    Button(
+                        onClick = onOpenZReportConfirm,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = WarmGold, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "🌙 Gün Sonu Z-Raporu Al & Günü Kapat (PDF)",
+                            color = WarmGold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Secondary Actions: Excel & PDF
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
+                        OutlinedButton(
                             onClick = onExportExcel,
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f))
                         ) {
-                            Icon(Icons.Default.FileDownload, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.FileDownload, contentDescription = null, tint = ForestGreen, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Haftalık Excel", color = WarmGold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text("Haftalık Excel", color = ForestGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
 
-                        Button(
+                        OutlinedButton(
                             onClick = onExportPdf,
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f))
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = ForestGreen, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Haftalık PDF", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text("Haftalık PDF", color = ForestGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Row 2: Z-Raporu Onay & Haftayı Kapat
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Weekly Reset Button
+                    Surface(
+                        color = Color(0xFFFBF8F3),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTriggerWeeklyReset() }
                     ) {
-                        Button(
-                            onClick = onOpenZReportConfirm,
-                            modifier = Modifier.weight(1.3f).height(42.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("🌙 Gün Sonu Z-Raporu (PDF)", color = WarmGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = onTriggerWeeklyReset,
-                            modifier = Modifier.weight(1f).height(42.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                        ) {
-                            Text("Haftayı Kapat 📅", color = ForestGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("📅", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Haftalık Kasa Kapatma & Arşivleme", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                    Text("Her Pazar gecesi haftayı kapatmak için kullanılır", fontSize = 10.5.sp, color = Slate500)
+                                }
+                            }
+                            Text("Kapat →", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = WarmGold)
                         }
                     }
                 }
             }
         }
 
-        // Section: Ürün Satışları (Sadece satış varsa gösterilir)
+        // 🌟 4. PRODUCT SALES BREAKDOWN (Only visible when there are sales)
         if (productStats.isNotEmpty()) {
             item {
                 Text(
-                    text = "ÜRÜN BAZLI SATIŞ ADETLERİ & CİRO",
-                    fontSize = 12.sp,
+                    text = "EN ÇOK SATAN ÜRÜNLER",
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = Slate500
+                    letterSpacing = 0.8.sp,
+                    color = ForestGreen
                 )
             }
 
@@ -817,7 +973,7 @@ fun SalesAnalyticsTab(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Row(
@@ -860,7 +1016,7 @@ fun SalesAnalyticsTab(
 }
 
 // -------------------------------------------------------------
-// TAB 1: DAY-BY-DAY WEEKLY REVENUE & MUTABAKAT TAB
+// TAB 1: DAY-BY-DAY WEEKLY REVENUE TAB
 // -------------------------------------------------------------
 @Composable
 fun DayByDayWeeklyTab(
@@ -869,16 +1025,16 @@ fun DayByDayWeeklyTab(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
                 text = "GÜN GÜN HAFTALIK KASA VE CİRO DÖKÜMÜ",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = Slate500
+                letterSpacing = 0.8.sp,
+                color = ForestGreen
             )
         }
 
@@ -886,11 +1042,15 @@ fun DayByDayWeeklyTab(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
-                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("Bu hafta henüz tamamlanmış günlük satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    Box(modifier = Modifier.padding(32.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📅", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Bu hafta henüz tamamlanmış günlük satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -901,9 +1061,8 @@ fun DayByDayWeeklyTab(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.15f))
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -911,19 +1070,17 @@ fun DayByDayWeeklyTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    color = SoftMintGreen,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = "${stat.dateKey} ${stat.dayName}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = ForestGreen,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
+                            Surface(
+                                color = SoftMintGreen,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "${stat.dateKey} ${stat.dayName}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = ForestGreen,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
                             }
 
                             Text(
@@ -936,10 +1093,10 @@ fun DayByDayWeeklyTab(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Stats breakdown row (Adisyon, Satılan Ürün, Kart, Nakit)
+                        // Stats Row
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Surface(
-                                color = Slate100,
+                                color = Color(0xFFF1F5F3),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -949,13 +1106,13 @@ fun DayByDayWeeklyTab(
                                 }
                             }
                             Surface(
-                                color = Slate100,
+                                color = Color(0xFFF1F5F3),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Satılan Ürün", fontSize = 10.sp, color = Slate500)
-                                    Text("${stat.itemsCount} ad.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SageGreen)
+                                    Text("Ürün", fontSize = 10.sp, color = Slate500)
+                                    Text("${stat.itemsCount}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SageGreen)
                                 }
                             }
                             Surface(
@@ -982,7 +1139,6 @@ fun DayByDayWeeklyTab(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Progress Bar representing percentage of total
                         LinearProgressIndicator(
                             progress = { if (totalWeeklyRevenue > 0) (stat.totalRevenue / totalWeeklyRevenue).toFloat() else 0f },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
@@ -992,8 +1148,8 @@ fun DayByDayWeeklyTab(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Haftalık cironun %$percentage'si bu günde yapıldı.",
-                            fontSize = 10.sp,
+                            text = "Haftalık cironun %$percentage'si bu günde gerçekleşti.",
+                            fontSize = 10.5.sp,
                             color = Slate500
                         )
                     }
@@ -1013,16 +1169,16 @@ fun TableAnalyticsTab(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
                 text = "MASALARA GÖRE CİRO VE YOĞUNLUK",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = Slate500
+                letterSpacing = 0.8.sp,
+                color = ForestGreen
             )
         }
 
@@ -1030,11 +1186,15 @@ fun TableAnalyticsTab(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
-                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("Masa bazlı satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    Box(modifier = Modifier.padding(32.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📍", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Masa bazlı satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -1044,11 +1204,11 @@ fun TableAnalyticsTab(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1079,9 +1239,8 @@ fun TableAnalyticsTab(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        // Progress Bar representing percentage of total
                         LinearProgressIndicator(
                             progress = { if (totalRevenue > 0) (stat.totalRevenue / totalRevenue).toFloat() else 0f },
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
@@ -1092,7 +1251,7 @@ fun TableAnalyticsTab(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Toplam cironun %$percentage'si bu masadan elde edildi.",
-                            fontSize = 10.sp,
+                            fontSize = 10.5.sp,
                             color = Slate500
                         )
                     }
@@ -1113,16 +1272,16 @@ fun SalesHistoryTab(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Text(
                 text = "TAMAMLANAN TÜM ADİSYONLAR (${completedOrders.size})",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = Slate500
+                letterSpacing = 0.8.sp,
+                color = ForestGreen
             )
         }
 
@@ -1130,11 +1289,15 @@ fun SalesHistoryTab(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
                 ) {
-                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("Tamamlanmış satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    Box(modifier = Modifier.padding(32.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📜", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tamamlanmış satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                        }
                     }
                 }
             }
@@ -1142,8 +1305,8 @@ fun SalesHistoryTab(
             items(completedOrders) { order ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -1261,20 +1424,20 @@ fun ManualCashEntryTab(
     var customerNameInput by remember { mutableStateOf("") }
     var selectedTableId by remember { mutableStateOf("table-kasa") }
     var selectedTableLabel by remember { mutableStateOf("KASA") }
-    var selectedPaymentMethod by remember { mutableStateOf("cash") } // "cash", "card", "transfer", "complimentary"
+    var selectedPaymentMethod by remember { mutableStateOf("cash") }
     val cart = remember { mutableStateListOf<OrderItem>() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Manuel Kasa Satış Girişi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
@@ -1304,7 +1467,7 @@ fun ManualCashEntryTab(
                             Triple("card", "💳 Kart", "card"),
                             Triple("transfer", "📲 Havale", "transfer"),
                             Triple("complimentary", "🎁 İkram", "complimentary")
-                        ).forEach { (id, label, method) ->
+                        ).forEach { (id, label, _) ->
                             FilterChip(
                                 selected = selectedPaymentMethod == id,
                                 onClick = { selectedPaymentMethod = id },
@@ -1338,14 +1501,15 @@ fun ManualCashEntryTab(
         }
 
         item {
-            Text("MENÜDEN ÜRÜN SEÇİN", fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = Slate500)
+            Text("MENÜDEN ÜRÜN SEÇİN", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = ForestGreen)
         }
 
         items(menuItems) { item ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -1390,7 +1554,7 @@ fun ManualCashEntryTab(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
