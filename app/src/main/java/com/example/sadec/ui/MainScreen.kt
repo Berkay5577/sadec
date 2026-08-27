@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
+import com.example.sadec.ui.components.UpdateDialog
 import com.example.sadec.ui.screens.*
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
@@ -42,10 +43,22 @@ fun MainScreen(
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Orders) }
     val orders by viewModel.orders.collectAsState()
     val tables by viewModel.tables.collectAsState()
+    val restaurant by viewModel.restaurant.collectAsState()
     val pendingCount = orders.count { !it.isArchived && it.status == "pending" }
     val isWeeklyLockActive by viewModel.isWeeklyLockActive.collectAsState()
     var hasDownloadedWeeklyExcel by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // In-App Update States
+    val showUpdateDialog by viewModel.showUpdateDialog.collectAsState()
+    val isDownloadingUpdate by viewModel.isDownloadingUpdate.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val downloadStatusText by viewModel.downloadStatusText.collectAsState()
+
+    // Check for update automatically
+    LaunchedEffect(restaurant?.appUpdateInfo) {
+        viewModel.checkAndPromptAutoUpdate(restaurant?.appUpdateInfo)
+    }
 
     // Active unarchived tables count (unpaid orders only)
     val activeTablesCount = remember(tables, orders) {
@@ -330,6 +343,23 @@ fun MainScreen(
                 }
             },
             confirmButton = {}
+        )
+    }
+
+    // In-App Update Modal Dialog
+    val updateInfo = restaurant?.appUpdateInfo
+    if (showUpdateDialog && updateInfo != null) {
+        UpdateDialog(
+            updateInfo = updateInfo,
+            isDownloading = isDownloadingUpdate,
+            downloadProgress = downloadProgress,
+            downloadStatusText = downloadStatusText,
+            onDownloadAndInstall = {
+                viewModel.downloadAndInstallUpdate(context, updateInfo.apkUrl)
+            },
+            onDismiss = {
+                viewModel.dismissUpdateDialog(updateInfo.latestVersionCode)
+            }
         )
     }
 }

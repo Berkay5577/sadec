@@ -551,4 +551,16 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun saveAppUpdateInfo(restaurantId: String, updateInfo: AppUpdateInfo): Result<Unit> {
+        return try {
+            db.collection("restaurants")
+                .document(restaurantId)
+                .set(mapOf("appUpdateInfo" to updateInfo), com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 }

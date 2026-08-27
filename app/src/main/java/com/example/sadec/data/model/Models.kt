@@ -19,7 +19,18 @@ data class Restaurant(
     val longitude: Double = 0.0,
     val enforceGeoFence: Boolean = false,
     val popupCampaign: PopupCampaign? = null,
+    val appUpdateInfo: AppUpdateInfo? = null,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+data class AppUpdateInfo(
+    val latestVersionCode: Int = 1,
+    val latestVersionName: String = "1.0.0",
+    val apkUrl: String = "",
+    val releaseNotes: String = "",
+    @get:PropertyName("isMandatory") @set:PropertyName("isMandatory")
+    var isMandatory: Boolean = false,
+    val publishDate: String = ""
 )
 
 data class PopupCampaign(

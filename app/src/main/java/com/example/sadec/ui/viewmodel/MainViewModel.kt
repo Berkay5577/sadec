@@ -1,6 +1,7 @@
 package com.example.sadec.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import com.example.sadec.data.repository.AuthRepository
 import com.example.sadec.data.repository.FirestoreRepository
 import com.example.sadec.data.repository.StorageRepository
 import com.example.sadec.service.OrderBackgroundService
+import com.example.sadec.util.AppUpdateManager
 import com.example.sadec.util.NotificationPreferences
 import com.example.sadec.util.SoundPlayer
 import com.google.firebase.messaging.FirebaseMessaging
@@ -56,6 +58,21 @@ class MainViewModel @JvmOverloads constructor(
 
     private val _isWakeScreenEnabled = MutableStateFlow(NotificationPreferences.isWakeScreenEnabled(application))
     val isWakeScreenEnabled: StateFlow<Boolean> = _isWakeScreenEnabled.asStateFlow()
+
+    // Uygulama İçi Otomatik Güncelleme (In-App OTA Updater)
+    private val _isDownloadingUpdate = MutableStateFlow(false)
+    val isDownloadingUpdate: StateFlow<Boolean> = _isDownloadingUpdate.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow(0f)
+    val downloadProgress: StateFlow<Float> = _downloadProgress.asStateFlow()
+
+    private val _downloadStatusText = MutableStateFlow("")
+    val downloadStatusText: StateFlow<String> = _downloadStatusText.asStateFlow()
+
+    private val _showUpdateDialog = MutableStateFlow(false)
+    val showUpdateDialog: StateFlow<Boolean> = _showUpdateDialog.asStateFlow()
+
+    private var dismissedUpdateVersionCode = 0
 
     private val prefs = application.getSharedPreferences("sadec_weekly_prefs", android.content.Context.MODE_PRIVATE)
 
@@ -615,5 +632,61 @@ class MainViewModel @JvmOverloads constructor(
     fun setWakeScreenEnabled(enabled: Boolean) {
         NotificationPreferences.setWakeScreenEnabled(getApplication(), enabled)
         _isWakeScreenEnabled.value = enabled
+    }
+
+    // --- UYGULAMA İÇİ GÜNCELLEME (IN-APP OTA UPDATER) ---
+    fun checkAndPromptAutoUpdate(updateInfo: AppUpdateInfo?) {
+        if (updateInfo != null && AppUpdateManager.isUpdateAvailable(updateInfo.latestVersionCode)) {
+            if (updateInfo.isMandatory || updateInfo.latestVersionCode != dismissedUpdateVersionCode) {
+                _showUpdateDialog.value = true
+            }
+        }
+    }
+
+    fun dismissUpdateDialog(versionCode: Int) {
+        dismissedUpdateVersionCode = versionCode
+        _showUpdateDialog.value = false
+    }
+
+    fun openUpdateDialog() {
+        _showUpdateDialog.value = true
+    }
+
+    fun downloadAndInstallUpdate(context: Context, apkUrl: String) {
+        if (_isDownloadingUpdate.value) return
+
+        viewModelScope.launch {
+            _isDownloadingUpdate.value = true
+            _downloadProgress.value = 0f
+            _downloadStatusText.value = "İndirme başlatılıyor... ⏳"
+
+            val result = AppUpdateManager.downloadApk(context, apkUrl) { progress, downloadedMB, totalMB ->
+                _downloadProgress.value = progress
+                val percent = (progress * 100).toInt()
+                _downloadStatusText.value = "%$percent İndirildi (%.1f MB / %.1f MB)".format(downloadedMB, totalMB)
+            }
+
+            result.onSuccess { apkFile ->
+                _isDownloadingUpdate.value = false
+                _downloadStatusText.value = "İndirme tamamlandı! Yükleniyor... ⚡"
+                AppUpdateManager.installApk(context, apkFile)
+            }.onFailure { error ->
+                _isDownloadingUpdate.value = false
+                _downloadStatusText.value = "İndirme başarısız: ${error.localizedMessage}"
+                _uiMessage.emit("Güncelleme indirilemedi: ${error.localizedMessage}")
+            }
+        }
+    }
+
+    fun publishAppUpdate(updateInfo: AppUpdateInfo, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = firestoreRepository.saveAppUpdateInfo(_restaurantId.value, updateInfo)
+            res.onSuccess {
+                _uiMessage.emit("Yeni sürüm yayını tüm cihazlara duyuruldu! 🚀")
+                onSuccess()
+            }.onFailure {
+                _uiMessage.emit("Güncelleme duyurulamadı: ${it.localizedMessage}")
+            }
+        }
     }
 }

@@ -30,10 +30,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.sadec.BuildConfig
 import com.example.sadec.R
+import com.example.sadec.data.model.AppUpdateInfo
 import com.example.sadec.data.model.PopupCampaign
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
+import com.example.sadec.util.AppUpdateManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -680,9 +683,185 @@ fun SettingsScreen(
                 }
             }
 
+            // 5. 🚀 UYGULAMA SÜRÜMÜ & GÜNCELLEMELER KARTI
+            val appUpdateInfo = restaurant?.appUpdateInfo
+            val currentVersionName = BuildConfig.VERSION_NAME
+            val currentVersionCode = BuildConfig.VERSION_CODE
+            val hasUpdate = appUpdateInfo != null && AppUpdateManager.isUpdateAvailable(appUpdateInfo.latestVersionCode)
+
+            var isPublishUpdateSectionExpanded by remember { mutableStateOf(false) }
+            var newVersionNameInput by remember { mutableStateOf(appUpdateInfo?.latestVersionName ?: "1.1.0") }
+            var newVersionCodeInput by remember { mutableStateOf((appUpdateInfo?.latestVersionCode ?: 1).plus(1).toString()) }
+            var newApkUrlInput by remember { mutableStateOf(appUpdateInfo?.apkUrl ?: "") }
+            var newReleaseNotesInput by remember { mutableStateOf(appUpdateInfo?.releaseNotes ?: "") }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = BorderStroke(1.dp, if (hasUpdate) WarmGold else ForestGreen.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(if (hasUpdate) WarmGold else ForestGreen, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (hasUpdate) Icons.Default.NewReleases else Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = if (hasUpdate) ForestGreen else WarmGold,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Uygulama Sürümü",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = ForestGreen
+                                )
+                                Text(
+                                    text = "Kurulu: v$currentVersionName (Yapı $currentVersionCode)",
+                                    fontSize = 12.sp,
+                                    color = Slate500
+                                )
+                            }
+                        }
+
+                        if (hasUpdate) {
+                            Button(
+                                onClick = { viewModel.openUpdateDialog() },
+                                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("Güncelle ⚡", color = WarmGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        } else {
+                            Surface(
+                                color = SoftMintGreen,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "🟢 Güncel",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ForestGreen,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (hasUpdate)
+                            "Yeni bir sürüm mevcut (v${appUpdateInfo?.latestVersionName}). Tek tıkla kablosuz güncelleyebilirsiniz."
+                        else
+                            "Uygulamanız en son Sade.C özellikleri ve geliştirmeleriyle güncel durumdadır.",
+                        fontSize = 12.sp,
+                        color = Slate500,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Admin Sürüm Yayınlama Paneli
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isPublishUpdateSectionExpanded = !isPublishUpdateSectionExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isPublishUpdateSectionExpanded) "🔼 Güncelleme Panelini Gizle" else "⚙️ Yeni Sürüm Duyur / Güncelleme Yayınla",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SageGreen
+                        )
+                        Icon(
+                            imageVector = if (isPublishUpdateSectionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = SageGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    if (isPublishUpdateSectionExpanded) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = newVersionNameInput,
+                            onValueChange = { newVersionNameInput = it },
+                            label = { Text("Yeni Sürüm Adı (Örn: 1.1.0)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newVersionCodeInput,
+                            onValueChange = { newVersionCodeInput = it },
+                            label = { Text("Yeni Sürüm Kodu (Örn: 2)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newApkUrlInput,
+                            onValueChange = { newApkUrlInput = it },
+                            label = { Text("APK İndirme Linki (Direct URL)") },
+                            placeholder = { Text("https://.../sadec.apk") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newReleaseNotesInput,
+                            onValueChange = { newReleaseNotesInput = it },
+                            label = { Text("Sürüm Notları (Neler Yeni?)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                val code = newVersionCodeInput.toIntOrNull() ?: (currentVersionCode + 1)
+                                val info = AppUpdateInfo(
+                                    latestVersionCode = code,
+                                    latestVersionName = newVersionNameInput.trim().ifBlank { "1.1.0" },
+                                    apkUrl = newApkUrlInput.trim(),
+                                    releaseNotes = newReleaseNotesInput.trim()
+                                )
+                                viewModel.publishAppUpdate(info) {
+                                    isPublishUpdateSectionExpanded = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                        ) {
+                            Text("Tüm Cihazlara Güncelleme Gönder 🚀", color = WarmGold, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 5. GÜVENLİ ÇIKIŞ (SIGN OUT)
+            // 6. GÜVENLİ ÇIKIŞ (SIGN OUT)
             OutlinedButton(
                 onClick = {
                     viewModel.signOut()
