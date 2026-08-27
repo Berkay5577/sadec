@@ -290,6 +290,28 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun closeDailyOrders(restaurantId: String, orderIds: List<String>, dayDate: String): Result<Unit> {
+        return try {
+            val batch = db.batch()
+            val ordersCol = db.collection("restaurants").document(restaurantId).collection("orders")
+            orderIds.forEach { orderId ->
+                val ref = ordersCol.document(orderId)
+                batch.update(
+                    ref,
+                    mapOf(
+                        "isDayClosed" to true,
+                        "closedDayDate" to dayDate,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun archiveOrders(restaurantId: String, orderIds: List<String>, weekPeriod: String): Result<Unit> {
         return try {
             val batch = db.batch()

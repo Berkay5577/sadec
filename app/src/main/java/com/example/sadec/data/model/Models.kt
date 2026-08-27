@@ -77,6 +77,9 @@ data class Order(
     val discountAmount: Double = 0.0,
     @get:PropertyName("isComplimentary") @set:PropertyName("isComplimentary")
     var isComplimentary: Boolean = false,
+    @get:PropertyName("isDayClosed") @set:PropertyName("isDayClosed")
+    var isDayClosed: Boolean = false, // Gün Sonu Z-Raporu kapanışı için
+    val closedDayDate: String = "",   // Örn: "2026-08-27"
     @get:PropertyName("isArchived") @set:PropertyName("isArchived")
     var isArchived: Boolean = false, // Haftalık sıfırlama/arşivleme için
     val weekPeriod: String = "",     // Örn: "2026-W35"

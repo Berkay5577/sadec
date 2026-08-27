@@ -29,6 +29,8 @@ import com.example.sadec.data.model.OrderItem
 import com.example.sadec.data.model.TableItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
+import com.example.sadec.util.DailyZReportPdfGenerator
+import com.example.sadec.util.ExcelReportGenerator
 import com.example.sadec.util.WeeklyReportPdfGenerator
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -47,6 +49,17 @@ data class TableSaleStat(
     val totalRevenue: Double
 )
 
+data class DaySummaryStat(
+    val dateKey: String,
+    val dayName: String,
+    val orderCount: Int,
+    val itemsCount: Int,
+    val cardRevenue: Double,
+    val cashRevenue: Double,
+    val transferRevenue: Double,
+    val totalRevenue: Double
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -60,7 +73,7 @@ fun DashboardScreen(
     val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("📊 Satış Analizi", "🏢 Masa Analizi", "📜 Satış Geçmişi", "➕ Kasa Girişi")
+    val tabs = listOf("📊 Satış Analizi", "📅 Gün Gün Kasa", "🏢 Masa Analizi", "📜 Satış Geçmişi", "➕ Kasa Girişi")
 
     // Weekly Period Label (e.g. 2026-W35)
     val cal = Calendar.getInstance()
@@ -68,34 +81,33 @@ fun DashboardScreen(
     val currentWeekNum = cal.get(Calendar.WEEK_OF_YEAR)
     val currentWeekPeriod = "$currentWeekYear-Hafta$currentWeekNum"
 
-    // Active unarchived completed orders for this week
-    val activeWeeklyOrders = remember(orders) {
-        orders.filter { !it.isArchived && it.status != "cancelled" && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }
-    }
+    val sdfDateKey = SimpleDateFormat("dd.MM.yyyy", Locale("tr", "TR"))
+    val todayDateStr = sdfDateKey.format(Date())
 
-    // Weekly Close & Mandatory Download State
+    // Weekly Close Dialog State
     var showWeeklyResetDialog by remember { mutableStateOf(false) }
     var hasDownloadedPdf by remember { mutableStateOf(false) }
 
-    // Date Filter for Reports (0: Bu Hafta (Aktif Kasa), 1: Bugün, 2: Tüm Zamanlar / Arşiv Dahil)
-    var dateFilterIndex by remember { mutableStateOf(0) }
+    // Z-Report Close Confirmation Dialog State
+    var showZReportConfirmDialog by remember { mutableStateOf(false) }
 
-    val todayStart = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.time
+    // Date Filter Index:
+    // 0: ☀️ Gün Özeti (Bugünün Açık Kasası - isDayClosed = false)
+    // 1: 📅 Haftalık Özet (Bu Hafta - Gün Gün Döküm Dahil)
+    // 2: 🗄️ Tüm Geçmiş & Arşiv
+    var dateFilterIndex by remember { mutableStateOf(0) }
 
     val displayedOrders = remember(orders, dateFilterIndex) {
         when (dateFilterIndex) {
-            0 -> orders.filter { !it.isArchived && it.status != "cancelled" }
-            1 -> orders.filter { order ->
-                if (order.status == "cancelled") false
-                else (order.createdAt?.after(todayStart) ?: true)
-            }
+            0 -> orders.filter { !it.isArchived && !it.isDayClosed && it.status != "cancelled" }
+            1 -> orders.filter { !it.isArchived && it.status != "cancelled" }
             else -> orders.filter { it.status != "cancelled" }
         }
+    }
+
+    // Active unarchived completed orders for this week (always for weekly reset/export)
+    val activeWeeklyOrders = remember(orders) {
+        orders.filter { !it.isArchived && it.status != "cancelled" && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }
     }
 
     // Completed / Paid orders in the active filter
@@ -158,6 +170,28 @@ fun DashboardScreen(
         }.sortedByDescending { it.totalRevenue }
     }
 
+    // Day-by-Day Stats for the Active Week
+    val weeklyDayStats = remember(activeWeeklyOrders) {
+        val sdfDay = SimpleDateFormat("EEEE", Locale("tr", "TR"))
+        val grouped = activeWeeklyOrders.groupBy { order ->
+            order.createdAt?.let { sdfDateKey.format(it) } ?: "Tarihsiz"
+        }
+        grouped.map { (dKey, dOrders) ->
+            val sampleDate = dOrders.firstOrNull()?.createdAt
+            val dayName = sampleDate?.let { sdfDay.format(it).uppercase(Locale("tr")) } ?: ""
+            DaySummaryStat(
+                dateKey = dKey,
+                dayName = dayName,
+                orderCount = dOrders.size,
+                itemsCount = dOrders.sumOf { it.items.sumOf { i -> i.quantity } },
+                cardRevenue = dOrders.sumOf { it.cardPaidAmount() },
+                cashRevenue = dOrders.sumOf { it.cashPaidAmount() },
+                transferRevenue = dOrders.sumOf { it.transferPaidAmount() },
+                totalRevenue = dOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -172,25 +206,25 @@ fun DashboardScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                        ExcelReportGenerator.generateAndShareExcelReport(
                             context = context,
-                            orders = completedOrders,
+                            orders = activeWeeklyOrders,
                             restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
                             weekPeriod = currentWeekPeriod
                         )
                     }) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Excel İndir", tint = WarmGold)
+                        Icon(Icons.Default.FileDownload, contentDescription = "Haftalık Excel İndir", tint = WarmGold)
                     }
 
                     IconButton(onClick = {
                         WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
                             context = context,
-                            orders = completedOrders,
+                            orders = activeWeeklyOrders,
                             restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
                             weekPeriod = currentWeekPeriod
                         )
                     }) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF İndir", tint = Color.White)
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Haftalık PDF İndir", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -207,14 +241,18 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Filter Chips Bar (Dönem Seçimi)
+            // Filter Chips Bar (GÜN ÖZETİ & HAFTALIK ÖZET SEÇİMİ)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("📅 Bu Hafta (Aktif Kasa)", "☀️ Bugün", "🗄️ Tüm Geçmiş").forEachIndexed { idx, title ->
+                listOf(
+                    "☀️ Gün Özeti (Bugün)",
+                    "📅 Haftalık Özet (Bu Hafta)",
+                    "🗄️ Tüm Geçmiş"
+                ).forEachIndexed { idx, title ->
                     FilterChip(
                         selected = dateFilterIndex == idx,
                         onClick = { dateFilterIndex = idx },
@@ -255,6 +293,7 @@ fun DashboardScreen(
 
             when (selectedTab) {
                 0 -> SalesAnalyticsTab(
+                    dateFilterIndex = dateFilterIndex,
                     totalRevenue = totalRevenue,
                     orderCount = completedOrders.size,
                     totalItemsSold = totalItemsSold,
@@ -264,9 +303,9 @@ fun DashboardScreen(
                     complimentaryTotal = complimentaryTotal,
                     productStats = productStats,
                     onExportExcel = {
-                        com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                        ExcelReportGenerator.generateAndShareExcelReport(
                             context = context,
-                            orders = completedOrders,
+                            orders = activeWeeklyOrders,
                             restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
                             weekPeriod = currentWeekPeriod
                         )
@@ -274,33 +313,31 @@ fun DashboardScreen(
                     onExportPdf = {
                         WeeklyReportPdfGenerator.generateAndShareWeeklyReport(
                             context = context,
-                            orders = completedOrders,
+                            orders = activeWeeklyOrders,
                             restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
                             weekPeriod = currentWeekPeriod
                         )
                     },
-                    onShareDailyZReport = {
-                        com.example.sadec.util.DailyZReportPdfGenerator.generateAndShareDailyZReportPdf(
-                            context = context,
-                            orders = completedOrders,
-                            productStats = productStats,
-                            tableStats = tableStats,
-                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
-                        )
+                    onOpenZReportConfirm = {
+                        showZReportConfirmDialog = true
                     },
                     onTriggerWeeklyReset = {
                         showWeeklyResetDialog = true
                         hasDownloadedPdf = false
                     }
                 )
-                1 -> TableAnalyticsTab(
+                1 -> DayByDayWeeklyTab(
+                    weeklyDayStats = weeklyDayStats,
+                    totalWeeklyRevenue = activeWeeklyOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
+                )
+                2 -> TableAnalyticsTab(
                     totalRevenue = totalRevenue,
                     tableStats = tableStats
                 )
-                2 -> SalesHistoryTab(
+                3 -> SalesHistoryTab(
                     completedOrders = completedOrders
                 )
-                3 -> ManualCashEntryTab(
+                4 -> ManualCashEntryTab(
                     menuItems = menuItems,
                     tables = tables,
                     onSaveManualOrder = { order ->
@@ -308,6 +345,98 @@ fun DashboardScreen(
                     }
                 )
             }
+        }
+
+        // 🌙 GÜN SONU Z-RAPORU & GÜN KAPANIŞI ONAY DİYALOĞU
+        if (showZReportConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showZReportConfirmDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🌙", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Gün Sonu Z-Raporu & Kapanış",
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreen,
+                            fontSize = 17.sp
+                        )
+                    }
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Bugünün Z-Raporunu PDF olarak çıkartıp bugünkü günü kapatmayı onaylıyor musunuz?",
+                            fontSize = 13.sp,
+                            color = Slate500,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Surface(
+                            color = SoftMintGreen,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Bugünün Kasa Özeti ($todayDateStr):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("• Net Günlük Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                Text("• Kredi Kartı / POS: ₺${"%.2f".format(cardTotal)}", fontSize = 12.sp, color = ForestGreen)
+                                Text("• Nakit Kasa: ₺${"%.2f".format(cashTotal)}", fontSize = 12.sp, color = Color(0xFF166534))
+                                if (transferTotal > 0) Text("• Havale/EFT: ₺${"%.2f".format(transferTotal)}", fontSize = 12.sp, color = Color(0xFF1E40AF))
+                                if (complimentaryTotal > 0) Text("• İkram/İndirim: ₺${"%.2f".format(complimentaryTotal)}", fontSize = 12.sp, color = Color(0xFF92400E))
+                                Text("• Toplam Adisyon: ${completedOrders.size} Adet ($totalItemsSold Ürün)", fontSize = 12.sp, color = SageGreen)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("ℹ️", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Onaylandığında; Gün Özeti, günün masa analizi ve satış geçmişi yeni güne sıfırlanır. Tüm veriler Haftalık Raporda eksiksiz kalmaya devam eder.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF92400E),
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            // 1. Generate and share Daily Z-Report PDF
+                            DailyZReportPdfGenerator.generateAndShareDailyZReportPdf(
+                                context = context,
+                                orders = completedOrders,
+                                productStats = productStats,
+                                tableStats = tableStats,
+                                restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
+                            )
+                            // 2. Close day in Firestore / ViewModel
+                            viewModel.closeDailyZReport(todayDateStr) {
+                                showZReportConfirmDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                    ) {
+                        Text("Z-Raporunu Al & Günü Kapat ✨", color = WarmGold, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showZReportConfirmDialog = false }) {
+                        Text("Vazgeç", color = Slate500)
+                    }
+                }
+            )
         }
 
         // 🛡️ HAFTALIK KASA KAPATMA VE RAPOR İNDİRME ZORUNLU DİYALOĞU
@@ -331,18 +460,19 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        val weeklyNet = activeWeeklyOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
                         Surface(
                             color = SoftMintGreen,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Bu Haftanın Kasa Özeti:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
+                                Text("Bu Haftanın Genel Kasa Özeti:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("• Net Ciro: ₺${"%.2f".format(totalRevenue)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                                Text("• Kredi Kartı: ₺${"%.2f".format(cardTotal)}", fontSize = 12.sp, color = ForestGreen)
-                                Text("• Nakit: ₺${"%.2f".format(cashTotal)}", fontSize = 12.sp, color = ForestGreen)
-                                Text("• Toplam Adisyon: ${completedOrders.size} Adet", fontSize = 12.sp, color = SageGreen)
+                                Text("• Toplam Haftalık Ciro: ₺${"%.2f".format(weeklyNet)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                Text("• Kredi Kartı: ₺${"%.2f".format(activeWeeklyOrders.sumOf { it.cardPaidAmount() })}", fontSize = 12.sp, color = ForestGreen)
+                                Text("• Nakit: ₺${"%.2f".format(activeWeeklyOrders.sumOf { it.cashPaidAmount() })}", fontSize = 12.sp, color = ForestGreen)
+                                Text("• Toplam Adisyon: ${activeWeeklyOrders.size} Adet", fontSize = 12.sp, color = SageGreen)
                             }
                         }
 
@@ -351,7 +481,7 @@ fun DashboardScreen(
                         // Step 1: Download Excel Button
                         Button(
                             onClick = {
-                                com.example.sadec.util.ExcelReportGenerator.generateAndShareExcelReport(
+                                ExcelReportGenerator.generateAndShareExcelReport(
                                     context = context,
                                     orders = activeWeeklyOrders,
                                     restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
@@ -416,10 +546,11 @@ fun DashboardScreen(
 }
 
 // -------------------------------------------------------------
-// TAB 1: SALES & PRODUCT ANALYTICS
+// TAB 0: SALES & PRODUCT ANALYTICS
 // -------------------------------------------------------------
 @Composable
 fun SalesAnalyticsTab(
+    dateFilterIndex: Int,
     totalRevenue: Double,
     orderCount: Int,
     totalItemsSold: Int,
@@ -430,9 +561,15 @@ fun SalesAnalyticsTab(
     productStats: List<ProductSaleStat>,
     onExportExcel: () -> Unit,
     onExportPdf: () -> Unit,
-    onShareDailyZReport: () -> Unit,
+    onOpenZReportConfirm: () -> Unit,
     onTriggerWeeklyReset: () -> Unit
 ) {
+    val periodTitle = when (dateFilterIndex) {
+        0 -> "BUGÜNKÜ CİRO"
+        1 -> "HAFTALIK CİRO"
+        else -> "TOPLAM CİRO"
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
@@ -450,7 +587,7 @@ fun SalesAnalyticsTab(
                     colors = CardDefaults.cardColors(containerColor = ForestGreen)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("TOPLAM CİRO", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
+                        Text(periodTitle, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.8f))
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("₺${"%.2f".format(totalRevenue)}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = WarmGold)
                     }
@@ -584,11 +721,11 @@ fun SalesAnalyticsTab(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("📊 Resmi Raporlama & Z-Raporu", fontWeight = FontWeight.Bold, color = ForestGreen, fontSize = 14.sp)
-                    Text("Tüm satış dökümlerini Excel/PDF indirin veya WhatsApp'tan tek tıkla Gün Sonu Z-Raporu gönderin.", fontSize = 11.sp, color = SageGreen)
+                    Text("Gün sonu Z-Raporunu PDF alarak günü kapatabilir veya haftalık dökümü Excel/PDF olarak çıkartabilirsiniz.", fontSize = 11.sp, color = SageGreen)
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Row 1: Excel & PDF
+                    // Row 1: Excel & PDF (Haftalık / Genel)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -602,7 +739,7 @@ fun SalesAnalyticsTab(
                         ) {
                             Icon(Icons.Default.FileDownload, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Excel İndir", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Haftalık Excel", color = WarmGold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
@@ -614,19 +751,19 @@ fun SalesAnalyticsTab(
                         ) {
                             Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("PDF İndir", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Haftalık PDF", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Row 2: Z-Raporu PDF & Haftayı Kapat
+                    // Row 2: Z-Raporu Onay & Haftayı Kapat
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = onShareDailyZReport,
+                            onClick = onOpenZReportConfirm,
                             modifier = Modifier.weight(1.3f).height(42.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
@@ -634,7 +771,7 @@ fun SalesAnalyticsTab(
                         ) {
                             Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("🌙 Gün Sonu Z-Raporu (PDF)", color = WarmGold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text("🌙 Gün Sonu Z-Raporu (PDF)", color = WarmGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
@@ -714,6 +851,150 @@ fun SalesAnalyticsTab(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// TAB 1: DAY-BY-DAY WEEKLY REVENUE & MUTABAKAT TAB
+// -------------------------------------------------------------
+@Composable
+fun DayByDayWeeklyTab(
+    weeklyDayStats: List<DaySummaryStat>,
+    totalWeeklyRevenue: Double
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                text = "GÜN GÜN HAFTALIK KASA VE CİRO DÖKÜMÜ",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = Slate500
+            )
+        }
+
+        if (weeklyDayStats.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Bu hafta henüz tamamlanmış günlük satış kaydı bulunmuyor.", color = Slate500, fontSize = 13.sp)
+                    }
+                }
+            }
+        } else {
+            items(weeklyDayStats) { stat ->
+                val percentage = if (totalWeeklyRevenue > 0) ((stat.totalRevenue / totalWeeklyRevenue) * 100).toInt() else 0
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.15f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = SoftMintGreen,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "${stat.dateKey} ${stat.dayName}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = ForestGreen,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "₺${"%.2f".format(stat.totalRevenue)}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = WarmGold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Stats breakdown row (Adisyon, Satılan Ürün, Kart, Nakit)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                color = Slate100,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Adisyon", fontSize = 10.sp, color = Slate500)
+                                    Text("${stat.orderCount}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                }
+                            }
+                            Surface(
+                                color = Slate100,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Satılan Ürün", fontSize = 10.sp, color = Slate500)
+                                    Text("${stat.itemsCount} ad.", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SageGreen)
+                                }
+                            }
+                            Surface(
+                                color = SoftMintGreen,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Kart", fontSize = 10.sp, color = ForestGreen)
+                                    Text("₺${"%.2f".format(stat.cardRevenue)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                }
+                            }
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.weight(1.2f)
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Nakit", fontSize = 10.sp, color = Color(0xFF166534))
+                                    Text("₺${"%.2f".format(stat.cashRevenue)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Progress Bar representing percentage of total
+                        LinearProgressIndicator(
+                            progress = { if (totalWeeklyRevenue > 0) (stat.totalRevenue / totalWeeklyRevenue).toFloat() else 0f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = ForestGreen,
+                            trackColor = ForestGreen.copy(alpha = 0.1f)
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Haftalık cironun %$percentage'si bu günde yapıldı.",
+                            fontSize = 10.sp,
+                            color = Slate500
+                        )
                     }
                 }
             }
@@ -1171,56 +1452,4 @@ fun ManualCashEntryTab(
             }
         }
     }
-}
-
-// 🌙 GÜN SONU HIZLI Z-RAPORU PAYLAŞMA
-fun shareDailyZReport(
-    context: Context,
-    restaurantName: String,
-    todayOrders: List<Order>,
-    productStats: List<ProductSaleStat>
-) {
-    val sdfDate = SimpleDateFormat("dd.MM.yyyy", Locale("tr", "TR"))
-    val sdfTime = SimpleDateFormat("HH:mm", Locale("tr", "TR"))
-    val dateStr = sdfDate.format(Date())
-    val timeStr = sdfTime.format(Date())
-
-    val totalNet = todayOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
-    val cardTotal = todayOrders.sumOf { it.cardPaidAmount() }
-    val cashTotal = todayOrders.sumOf { it.cashPaidAmount() }
-    val transferTotal = todayOrders.sumOf { it.transferPaidAmount() }
-    val compTotal = todayOrders.sumOf { it.complimentaryAmount() }
-    val totalItems = todayOrders.sumOf { it.items.sumOf { i -> i.quantity } }
-    val topProducts = if (productStats.isNotEmpty()) {
-        productStats.take(5).joinToString("\n") { "• ${it.name}: ${it.totalQuantity} adet (₺${"%.2f".format(it.totalRevenue)})" }
-    } else {
-        "• Satış kaydı bulunmuyor"
-    }
-
-    val reportText = """
-☕ *${restaurantName.uppercase()} — GÜN SONU Z-RAPORU* 🌙
-📅 Tarih: $dateStr • Saat: $timeStr
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 *NET GÜNLÜK CİRO:* ₺${"%.2f".format(totalNet)}
-
-💳 *Kredi Kartı / POS:* ₺${"%.2f".format(cardTotal)}
-💵 *Nakit Kasa:* ₺${"%.2f".format(cashTotal)}
-📲 *Havale / EFT / FAST:* ₺${"%.2f".format(transferTotal)}
-🎁 *İkram / İndirim:* ₺${"%.2f".format(compTotal)}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 *Toplam Adisyon:* ${todayOrders.size} Adet
-☕ *Satılan Ürün:* $totalItems Adet
-
-🔥 *Günün En Çok Satanları:*
-$topProducts
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-Hayırlı işler ve bereketli kazançlar dileriz! 🌿✨
-    """.trimIndent()
-
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "$restaurantName Gün Sonu Raporu ($dateStr)")
-        putExtra(Intent.EXTRA_TEXT, reportText)
-    }
-    context.startActivity(Intent.createChooser(intent, "Gün Sonu Z-Raporunu Paylaş (WhatsApp / SMS)"))
 }

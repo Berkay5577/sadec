@@ -16,20 +16,17 @@ object ExcelReportGenerator {
 
     /**
      * Generates a fully detailed Excel-compatible CSV file (with UTF-8 BOM for Microsoft Excel)
-     * containing every detail of the weekly orders:
-     * - Tarih (Satıldığı Gün)
-     * - Saat (Satıldığı Saat)
+     * containing weekly orders grouped and separated DAY-BY-DAY (Gün Gün Ayrılmış):
+     * - Gün Başlığı (Örn: === 25.08.2026 SALI ===)
+     * - Tarih & Saat
      * - Masa Adı / No
-     * - Müşteri Adı (Kim tarafından sipariş edildi)
+     * - Müşteri Adı
      * - Sipariş Edilen Ürünler ve Kalemler
      * - Kaç Adet Sipariş Edildi
      * - Ödeme Yöntemi (Nakit, Kredi Kartı, Havale, İkram)
      * - İndirim / İkram Tutarı (TL)
-     * - Tahsilat Tutarı (₺)
-     * - Ödeme Durumu
-     * - Sipariş Notu
-     *
-     * Opens system share/save dialog for Excel / Sheets.
+     * - Net Tahsilat Tutarı (₺)
+     * - Günlük Alt Toplam ve Genel Haftalık Özet Tablosu
      */
     fun generateAndShareExcelReport(
         context: Context,
@@ -39,7 +36,10 @@ object ExcelReportGenerator {
         onSuccess: () -> Unit = {}
     ): File? {
         val completedOrders = orders.filter { !it.isArchived && it.status != "cancelled" }
+            .sortedBy { it.createdAt?.time ?: 0L }
+
         val sdfDate = SimpleDateFormat("dd.MM.yyyy", Locale("tr", "TR"))
+        val sdfDayName = SimpleDateFormat("EEEE", Locale("tr", "TR"))
         val sdfTime = SimpleDateFormat("HH:mm", Locale("tr", "TR"))
         val sdfFull = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale("tr", "TR"))
         val nowFormatted = sdfFull.format(Date())
@@ -61,13 +61,13 @@ object ExcelReportGenerator {
             val writer = OutputStreamWriter(fos, StandardCharsets.UTF_8)
 
             // Header Section
-            writer.write("\"$restaurantName - HAFTALIK RESMİ SATIŞ & KASA GELİR RAPORU\"\n")
+            writer.write("\"$restaurantName - HAFTALIK RESMİ SATIŞ & KASA GELİR RAPORU (GÜN GÜN AYRILMIŞ)\"\n")
             writer.write("\"Rapor Dönemi:\";\"${if (weekPeriod.isNotBlank()) weekPeriod else "Cari Hafta"}\"\n")
             writer.write("\"Rapor Oluşturma Tarihi:\";\"$nowFormatted\"\n")
             writer.write("\"Toplam Adisyon Sayısı:\";\"${completedOrders.size} Adet\"\n\n")
 
             // Column Headers
-            writer.write("\"Sıra No\";\"Satış Tarihi\";\"Satış Saati\";\"Masa\";\"Müşteri Adı\";\"Sipariş Edilen Ürünler\";\"Toplam Ürün Adedi\";\"Ödeme Yöntemi\";\"İndirim/İkram (TL)\";\"Net Tahsilat (TL)\";\"Ödeme Durumu\";\"Müşteri/Garson Notu\"\n")
+            writer.write("\"Sıra No\";\"Satış Tarihi\";\"Gün\";\"Satış Saati\";\"Masa\";\"Müşteri Adı\";\"Sipariş Edilen Ürünler\";\"Toplam Ürün Adedi\";\"Ödeme Yöntemi\";\"İndirim/İkram (TL)\";\"Net Tahsilat (TL)\";\"Ödeme Durumu\";\"Müşteri/Garson Notu\"\n")
 
             var totalNetRevenue = 0.0
             var totalItemCount = 0
@@ -76,62 +76,92 @@ object ExcelReportGenerator {
             var totalTransfer = 0.0
             var totalComplimentaryOrDiscount = 0.0
 
-            completedOrders.forEachIndexed { index, order ->
-                val dateStr = order.createdAt?.let { sdfDate.format(it) } ?: "--"
-                val timeStr = order.createdAt?.let { sdfTime.format(it) } ?: "--"
-                val tableStr = order.tableLabel.ifBlank { "Masa" }
-                val customerStr = order.customerName.ifBlank { "Misafir" }
+            // Group orders day-by-day
+            val ordersByDay = completedOrders.groupBy { order ->
+                order.createdAt?.let { sdfDate.format(it) } ?: "Tarihsiz"
+            }
 
-                // Products summary (e.g. 2x Espresso, 1x San Sebastian)
-                val productsDetail = order.items.joinToString(" + ") {
-                    val compTag = if (it.isComplimentary) " (İKRAM)" else if (it.discountAmount > 0) " (-₺${"%.2f".format(it.discountAmount)})" else ""
-                    "${it.quantity}x ${it.name}$compTag (₺${"%.2f".format(it.effectivePrice())})"
-                }
-                val orderItemsCount = order.items.sumOf { it.quantity }
-                val orderNetRevenue = order.paidAmount().let { if (it > 0) it else order.totalPrice }
-                val orderDiscount = order.items.sumOf { it.discountAmount } + order.complimentaryAmount()
+            var globalRowIndex = 1
 
-                val methodsUsed = order.items.mapNotNull {
-                    when (it.paymentMethod) {
-                        "card" -> "Kredi Kartı"
-                        "cash" -> "Nakit"
-                        "transfer" -> "Havale"
-                        "complimentary" -> "İkram"
-                        else -> null
+            ordersByDay.forEach { (dateKey, dayOrders) ->
+                val sampleDate = dayOrders.firstOrNull()?.createdAt
+                val dayNameStr = sampleDate?.let { sdfDayName.format(it).uppercase(Locale("tr")) } ?: ""
+
+                // Day Banner in CSV
+                writer.write("\n\"---\";\"=== $dateKey $dayNameStr ===\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+
+                var dayRevenue = 0.0
+                var dayItemsCount = 0
+                var dayCard = 0.0
+                var dayCash = 0.0
+                var dayTransfer = 0.0
+
+                dayOrders.forEach { order ->
+                    val dateStr = order.createdAt?.let { sdfDate.format(it) } ?: "--"
+                    val dayStr = order.createdAt?.let { sdfDayName.format(it) } ?: "--"
+                    val timeStr = order.createdAt?.let { sdfTime.format(it) } ?: "--"
+                    val tableStr = order.tableLabel.ifBlank { "Masa" }
+                    val customerStr = order.customerName.ifBlank { "Misafir" }
+
+                    val productsDetail = order.items.joinToString(" + ") {
+                        val compTag = if (it.isComplimentary) " (İKRAM)" else if (it.discountAmount > 0) " (-₺${"%.2f".format(it.discountAmount)})" else ""
+                        "${it.quantity}x ${it.name}$compTag (₺${"%.2f".format(it.effectivePrice())})"
                     }
-                }.distinct().joinToString(", ").ifBlank {
-                    when (order.paymentMethod) {
-                        "card" -> "Kredi Kartı"
-                        "cash" -> "Nakit"
-                        "transfer" -> "Havale"
-                        "complimentary" -> "İkram"
-                        else -> "Kredi Kartı"
+                    val orderItemsCount = order.items.sumOf { it.quantity }
+                    val orderNetRevenue = order.paidAmount().let { if (it > 0) it else order.totalPrice }
+                    val orderDiscount = order.items.sumOf { it.discountAmount } + order.complimentaryAmount()
+
+                    val methodsUsed = order.items.mapNotNull {
+                        when (it.paymentMethod) {
+                            "card" -> "Kredi Kartı"
+                            "cash" -> "Nakit"
+                            "transfer" -> "Havale"
+                            "complimentary" -> "İkram"
+                            else -> null
+                        }
+                    }.distinct().joinToString(", ").ifBlank {
+                        when (order.paymentMethod) {
+                            "card" -> "Kredi Kartı"
+                            "cash" -> "Nakit"
+                            "transfer" -> "Havale"
+                            "complimentary" -> "İkram"
+                            else -> "Kredi Kartı"
+                        }
                     }
+
+                    val paymentStatus = if (order.isFullyPaid() || order.status == "delivered") "Tahsil Edildi (Ödendi)" else "Açık / Bekliyor"
+                    val noteStr = order.note.ifBlank { "-" }.replace("\"", "'")
+
+                    dayRevenue += orderNetRevenue
+                    dayItemsCount += orderItemsCount
+                    dayCard += order.cardPaidAmount()
+                    dayCash += order.cashPaidAmount()
+                    dayTransfer += order.transferPaidAmount()
+
+                    totalNetRevenue += orderNetRevenue
+                    totalItemCount += orderItemsCount
+                    totalCard += order.cardPaidAmount()
+                    totalCash += order.cashPaidAmount()
+                    totalTransfer += order.transferPaidAmount()
+                    totalComplimentaryOrDiscount += orderDiscount
+
+                    writer.write("$globalRowIndex;\"$dateStr\";\"$dayStr\";\"$timeStr\";\"$tableStr\";\"$customerStr\";\"$productsDetail\";$orderItemsCount;\"$methodsUsed\";${"%.2f".format(orderDiscount).replace(".", ",")};${"%.2f".format(orderNetRevenue).replace(".", ",")};\"$paymentStatus\";\"$noteStr\"\n")
+                    globalRowIndex++
                 }
 
-                val paymentStatus = if (order.isFullyPaid() || order.status == "delivered") "Tahsil Edildi (Ödendi)" else "Açık / Bekliyor"
-                val noteStr = order.note.ifBlank { "-" }.replace("\"", "'")
-
-                totalNetRevenue += orderNetRevenue
-                totalItemCount += orderItemsCount
-                totalCard += order.cardPaidAmount()
-                totalCash += order.cashPaidAmount()
-                totalTransfer += order.transferPaidAmount()
-                totalComplimentaryOrDiscount += orderDiscount
-
-                // Clean CSV Row (semicolon separated for European/Turkish Excel standard)
-                writer.write("${index + 1};\"$dateStr\";\"$timeStr\";\"$tableStr\";\"$customerStr\";\"$productsDetail\";$orderItemsCount;\"$methodsUsed\";${"%.2f".format(orderDiscount).replace(".", ",")};${"%.2f".format(orderNetRevenue).replace(".", ",")};\"$paymentStatus\";\"$noteStr\"\n")
+                // Day Subtotal Row
+                writer.write("\"*\";\"[GÜN TOPLAMI: $dateKey $dayNameStr]\";\"\";\"\";\"\";\"Satılan: $dayItemsCount Adet\";\"\";\"\";\"Kart: ₺${"%.2f".format(dayCard).replace(".", ",")} | Nakit: ₺${"%.2f".format(dayCash).replace(".", ",")}\";\"\";\"₺${"%.2f".format(dayRevenue).replace(".", ",")}\";\"GÜN CİROSU\";\"\"\n")
             }
 
             // Summary Section at bottom
-            writer.write("\n\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\"\n")
-            writer.write("\"ÖZET TAHSİLAT TABLOSU\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"Kredi Kartı Tahsilat:\";\"₺${"%.2f".format(totalCard).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"Nakit Tahsilat:\";\"₺${"%.2f".format(totalCash).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"Havale/EFT/FAST Tahsilat:\";\"₺${"%.2f".format(totalTransfer).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"İkram / İndirim Toplamı:\";\"₺${"%.2f".format(totalComplimentaryOrDiscount).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"GENEL TOPLAM SATILAN ÜRÜN:\";\"$totalItemCount Adet\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
-            writer.write("\"GENEL NET CİRO:\";\"₺${"%.2f".format(totalNetRevenue).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\n\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\";\"=====================\"\n")
+            writer.write("\"GENEL HAFTALIK ÖZET MUTABAKAT TABLOSU\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Haftalık Kredi Kartı / POS Tahsilatı:\";\"₺${"%.2f".format(totalCard).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Haftalık Nakit Kasa Tahsilatı:\";\"₺${"%.2f".format(totalCash).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Haftalık Havale/EFT/FAST Tahsilatı:\";\"₺${"%.2f".format(totalTransfer).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Haftalık İkram / İndirim Toplamı:\";\"₺${"%.2f".format(totalComplimentaryOrDiscount).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"HAFTALIK TOPLAM SATILAN ÜRÜN:\";\"$totalItemCount Adet\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"HAFTALIK GENEL NET CİRO:\";\"₺${"%.2f".format(totalNetRevenue).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
 
             writer.flush()
             writer.close()
@@ -156,7 +186,7 @@ object ExcelReportGenerator {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
 
-            Toast.makeText(context, "Haftalık Excel raporu oluşturuldu! 📊📥", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Haftalık Excel raporu gün gün ayrılarak oluşturuldu! 📊📥", Toast.LENGTH_LONG).show()
             onSuccess()
             return file
         } catch (e: Exception) {

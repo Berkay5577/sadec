@@ -334,6 +334,24 @@ class MainViewModel @JvmOverloads constructor(
         _isWeeklyLockActive.value = false
     }
 
+    fun closeDailyZReport(dayDate: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val unclosedOrders = _orders.value.filter { !it.isArchived && !it.isDayClosed && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }.map { it.id }
+            if (unclosedOrders.isEmpty()) {
+                _uiMessage.emit("Günü kapatılacak tamamlanmış sipariş bulunmuyor.")
+                onComplete()
+                return@launch
+            }
+            val res = firestoreRepository.closeDailyOrders(_restaurantId.value, unclosedOrders, dayDate)
+            res.onSuccess {
+                _uiMessage.emit("Günlük kasa başarıyla sıfırlandı ve Z-Raporu onaylandı! 🌙✅")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Gün kapanış hatası: ${it.localizedMessage}")
+            }
+        }
+    }
+
     fun archiveWeeklyOrders(weekPeriod: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val unarchivedOrders = _orders.value.filter { !it.isArchived }.map { it.id }
