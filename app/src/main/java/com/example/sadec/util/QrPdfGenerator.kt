@@ -15,8 +15,9 @@ object QrPdfGenerator {
 
     /**
      * Generates a luxury, high-resolution printable PDF containing QR stand cards for all tables.
-     * Automatically formats and fits all table QR stands into exactly 2 printable A4 pages.
-     * Includes the official Sade.C logo in both the header and the QR code center.
+     * - Formats and fits all table QR stands into exactly 2 printable A4 pages.
+     * - Top Header has a distinctive Forest Green circular logo badge with gold ring.
+     * - QR Codes are 100% clean and plain (no center watermark).
      */
     fun generateAndSharePdf(
         context: Context,
@@ -166,26 +167,29 @@ object QrPdfGenerator {
                     )
                     canvas.drawRoundRect(innerRect, 12f, 12f, innerBorderPaint)
 
-                    // 2. Card Content Layout with Logo based on rowsCount
+                    // 2. Card Content Layout with Green Circular Logo in Header
                     val cardCenterX = cardLeft + (cardWidth / 2f)
 
                     when (rowsCount) {
                         2 -> {
                             // LARGE 2x2 LAYOUT (~374pt height)
-                            // A) Header Logo
+                            // A) Header Green Logo Badge
                             if (logoBitmap != null) {
-                                val logoDiameter = 36f
+                                val logoDiameter = 38f
                                 val logoRect = RectF(
                                     cardCenterX - (logoDiameter / 2f),
                                     cardTop + 14f,
                                     cardCenterX + (logoDiameter / 2f),
                                     cardTop + 14f + logoDiameter
                                 )
-                                drawCircularBitmap(
-                                    canvas,
-                                    logoBitmap,
-                                    logoRect,
-                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 1f; isAntiAlias = true }
+                                drawCircularLogoBadge(
+                                    canvas = canvas,
+                                    bitmap = logoBitmap,
+                                    destRect = logoRect,
+                                    bgFillColor = colorForestGreen,
+                                    ringColor = colorWarmGold,
+                                    ringWidth = 1.2f,
+                                    innerPadding = 3.5f
                                 )
                             }
 
@@ -197,7 +201,7 @@ object QrPdfGenerator {
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            val titleY = if (logoBitmap != null) cardTop + 64f else cardTop + 30f
+                            val titleY = if (logoBitmap != null) cardTop + 66f else cardTop + 30f
                             canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
                             val subPaint = Paint().apply {
@@ -210,7 +214,7 @@ object QrPdfGenerator {
                             }
                             canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, titleY + 13f, subPaint)
 
-                            // C) QR Code with embedded center logo (155pt)
+                            // C) Pure & Clean QR Code (155pt, no center obstruction)
                             val qrSize = 155f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
                             val qrTop = titleY + 22f
@@ -224,26 +228,6 @@ object QrPdfGenerator {
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 400)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
-
-                                // Draw small center logo on QR code
-                                if (logoBitmap != null) {
-                                    val qrCenterLogoSize = 34f
-                                    val qrCenterRect = RectF(
-                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
-                                    )
-                                    // White background behind center logo
-                                    val centerBgRect = RectF(qrCenterRect.left - 2f, qrCenterRect.top - 2f, qrCenterRect.right + 2f, qrCenterRect.bottom + 2f)
-                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
-                                    drawCircularBitmap(
-                                        canvas,
-                                        logoBitmap,
-                                        qrCenterRect,
-                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 1f; isAntiAlias = true }
-                                    )
-                                }
                             }
 
                             // D) Table Badge
@@ -282,20 +266,23 @@ object QrPdfGenerator {
                         }
                         3 -> {
                             // COMPACT 2x3 LAYOUT (~248pt height)
-                            // A) Header Logo & Title
+                            // A) Header Green Logo Badge & Title
                             if (logoBitmap != null) {
-                                val logoDiameter = 24f
+                                val logoDiameter = 26f
                                 val logoRect = RectF(
                                     cardCenterX - (logoDiameter / 2f),
                                     cardTop + 8f,
                                     cardCenterX + (logoDiameter / 2f),
                                     cardTop + 8f + logoDiameter
                                 )
-                                drawCircularBitmap(
-                                    canvas,
-                                    logoBitmap,
-                                    logoRect,
-                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.8f; isAntiAlias = true }
+                                drawCircularLogoBadge(
+                                    canvas = canvas,
+                                    bitmap = logoBitmap,
+                                    destRect = logoRect,
+                                    bgFillColor = colorForestGreen,
+                                    ringColor = colorWarmGold,
+                                    ringWidth = 1f,
+                                    innerPadding = 2.5f
                                 )
                             }
 
@@ -306,7 +293,7 @@ object QrPdfGenerator {
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            val titleY = if (logoBitmap != null) cardTop + 43f else cardTop + 20f
+                            val titleY = if (logoBitmap != null) cardTop + 45f else cardTop + 20f
                             canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
                             val subPaint = Paint().apply {
@@ -319,7 +306,7 @@ object QrPdfGenerator {
                             }
                             canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, titleY + 10f, subPaint)
 
-                            // B) QR Code (105pt) with embedded logo
+                            // B) Pure & Clean QR Code (105pt, no center obstruction)
                             val qrSize = 105f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
                             val qrTop = titleY + 16f
@@ -333,24 +320,6 @@ object QrPdfGenerator {
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 300)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
-
-                                if (logoBitmap != null) {
-                                    val qrCenterLogoSize = 24f
-                                    val qrCenterRect = RectF(
-                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
-                                    )
-                                    val centerBgRect = RectF(qrCenterRect.left - 1.5f, qrCenterRect.top - 1.5f, qrCenterRect.right + 1.5f, qrCenterRect.bottom + 1.5f)
-                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
-                                    drawCircularBitmap(
-                                        canvas,
-                                        logoBitmap,
-                                        qrCenterRect,
-                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.8f; isAntiAlias = true }
-                                    )
-                                }
                             }
 
                             // C) Table Badge
@@ -390,18 +359,21 @@ object QrPdfGenerator {
                         else -> {
                             // DENSE 2x4 LAYOUT (~184pt height)
                             if (logoBitmap != null) {
-                                val logoDiameter = 18f
+                                val logoDiameter = 20f
                                 val logoRect = RectF(
                                     cardCenterX - (logoDiameter / 2f),
                                     cardTop + 6f,
                                     cardCenterX + (logoDiameter / 2f),
                                     cardTop + 6f + logoDiameter
                                 )
-                                drawCircularBitmap(
-                                    canvas,
-                                    logoBitmap,
-                                    logoRect,
-                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.6f; isAntiAlias = true }
+                                drawCircularLogoBadge(
+                                    canvas = canvas,
+                                    bitmap = logoBitmap,
+                                    destRect = logoRect,
+                                    bgFillColor = colorForestGreen,
+                                    ringColor = colorWarmGold,
+                                    ringWidth = 0.8f,
+                                    innerPadding = 2f
                                 )
                             }
 
@@ -412,10 +384,10 @@ object QrPdfGenerator {
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            val titleY = if (logoBitmap != null) cardTop + 33f else cardTop + 16f
+                            val titleY = if (logoBitmap != null) cardTop + 35f else cardTop + 16f
                             canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
-                            // QR Code (80pt)
+                            // QR Code (80pt, no center obstruction)
                             val qrSize = 80f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
                             val qrTop = titleY + 6f
@@ -429,24 +401,6 @@ object QrPdfGenerator {
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 250)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
-
-                                if (logoBitmap != null) {
-                                    val qrCenterLogoSize = 18f
-                                    val qrCenterRect = RectF(
-                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
-                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
-                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
-                                    )
-                                    val centerBgRect = RectF(qrCenterRect.left - 1f, qrCenterRect.top - 1f, qrCenterRect.right + 1f, qrCenterRect.bottom + 1f)
-                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
-                                    drawCircularBitmap(
-                                        canvas,
-                                        logoBitmap,
-                                        qrCenterRect,
-                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.6f; isAntiAlias = true }
-                                    )
-                                }
                             }
 
                             // Table Badge
@@ -544,16 +498,48 @@ object QrPdfGenerator {
         }
     }
 
-    private fun drawCircularBitmap(canvas: Canvas, bitmap: Bitmap, destRect: RectF, borderPaint: Paint? = null) {
+    /**
+     * Draws the Sade.C logo inside a luxury Forest Green circular badge with a Warm Gold border ring.
+     */
+    private fun drawCircularLogoBadge(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        destRect: RectF,
+        bgFillColor: Int,
+        ringColor: Int,
+        ringWidth: Float = 1.2f,
+        innerPadding: Float = 4f
+    ) {
+        // 1. Draw solid background circle (ForestGreen)
+        val bgPaint = Paint().apply {
+            color = bgFillColor
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+        canvas.drawOval(destRect, bgPaint)
+
+        // 2. Draw gold ring border
+        val borderPaint = Paint().apply {
+            color = ringColor
+            style = Paint.Style.STROKE
+            strokeWidth = ringWidth
+            isAntiAlias = true
+        }
+        canvas.drawOval(destRect, borderPaint)
+
+        // 3. Draw logo bitmap inside circle with padding
+        val logoRect = RectF(
+            destRect.left + innerPadding,
+            destRect.top + innerPadding,
+            destRect.right - innerPadding,
+            destRect.bottom - innerPadding
+        )
         val saveCount = canvas.save()
         val path = Path().apply {
-            addOval(destRect, Path.Direction.CW)
+            addOval(logoRect, Path.Direction.CW)
         }
         canvas.clipPath(path)
-        canvas.drawBitmap(bitmap, null, destRect, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        canvas.drawBitmap(bitmap, null, logoRect, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
         canvas.restoreToCount(saveCount)
-        if (borderPaint != null) {
-            canvas.drawOval(destRect, borderPaint)
-        }
     }
 }
