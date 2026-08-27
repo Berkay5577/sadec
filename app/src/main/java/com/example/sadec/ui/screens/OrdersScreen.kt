@@ -143,7 +143,7 @@ fun OrdersScreen(
                             order = order,
                             onClick = { onOrderClick(order) },
                             onDeliver = {
-                                viewModel.payFullOrder(order.id)
+                                viewModel.updateOrderStatus(order.id, "delivered")
                             },
                             onCancel = {
                                 orderToCancel = order

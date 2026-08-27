@@ -47,10 +47,10 @@ fun MainScreen(
     var hasDownloadedWeeklyExcel by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Active unarchived tables count
+    // Active unarchived tables count (unpaid orders only)
     val activeTablesCount = remember(tables, orders) {
         tables.count { table ->
-            orders.any { ord -> ord.tableId == table.id && !ord.isArchived && ord.status != "cancelled" && (!ord.isFullyPaid() || ord.status == "pending" || ord.status == "preparing" || ord.status == "ready") }
+            orders.any { ord -> ord.tableId == table.id && !ord.isArchived && ord.status != "cancelled" && !ord.isFullyPaid() }
         }
     }
 
