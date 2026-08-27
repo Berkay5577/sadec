@@ -8,6 +8,8 @@ import com.example.sadec.data.model.*
 import com.example.sadec.data.repository.AuthRepository
 import com.example.sadec.data.repository.FirestoreRepository
 import com.example.sadec.data.repository.StorageRepository
+import com.example.sadec.service.OrderBackgroundService
+import com.example.sadec.util.NotificationPreferences
 import com.example.sadec.util.SoundPlayer
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.Date
@@ -44,6 +46,16 @@ class MainViewModel @JvmOverloads constructor(
 
     private val _tables = MutableStateFlow<List<TableItem>>(emptyList())
     val tables: StateFlow<List<TableItem>> = _tables.asStateFlow()
+
+    // Cihaza Özel Bildirim Durumları (StateFlow)
+    private val _isDeviceNotificationsEnabled = MutableStateFlow(NotificationPreferences.isDeviceNotificationsEnabled(application))
+    val isDeviceNotificationsEnabled: StateFlow<Boolean> = _isDeviceNotificationsEnabled.asStateFlow()
+
+    private val _isNotificationSoundEnabled = MutableStateFlow(NotificationPreferences.isSoundEnabled(application))
+    val isNotificationSoundEnabled: StateFlow<Boolean> = _isNotificationSoundEnabled.asStateFlow()
+
+    private val _isWakeScreenEnabled = MutableStateFlow(NotificationPreferences.isWakeScreenEnabled(application))
+    val isWakeScreenEnabled: StateFlow<Boolean> = _isWakeScreenEnabled.asStateFlow()
 
     private val prefs = application.getSharedPreferences("sadec_weekly_prefs", android.content.Context.MODE_PRIVATE)
 
@@ -110,8 +122,12 @@ class MainViewModel @JvmOverloads constructor(
                     if (!isFirstOrdersLoad) {
                         val newArrivals = currentPendingIds - previousOrderIds
                         if (newArrivals.isNotEmpty()) {
-                            SoundPlayer.playOrderAlert(getApplication())
-                            _uiMessage.emit("🔔 Yeni sipariş geldi!")
+                            if (NotificationPreferences.isDeviceNotificationsEnabled(getApplication())) {
+                                if (NotificationPreferences.isSoundEnabled(getApplication())) {
+                                    SoundPlayer.playOrderAlert(getApplication())
+                                }
+                                _uiMessage.emit("🔔 Yeni sipariş geldi!")
+                            }
                         }
                     }
                     previousOrderIds = currentPendingIds
@@ -576,5 +592,28 @@ class MainViewModel @JvmOverloads constructor(
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // --- CİHAZ BİLDİRİM AYARLARI ---
+    fun setDeviceNotificationsEnabled(enabled: Boolean) {
+        NotificationPreferences.setDeviceNotificationsEnabled(getApplication(), enabled)
+        _isDeviceNotificationsEnabled.value = enabled
+        if (enabled) {
+            OrderBackgroundService.startService(getApplication())
+            viewModelScope.launch { _uiMessage.emit("Bu cihazda bildirimler açıldı 🔔") }
+        } else {
+            OrderBackgroundService.stopService(getApplication())
+            viewModelScope.launch { _uiMessage.emit("Bu cihazda bildirimler kapatıldı 🔕") }
+        }
+    }
+
+    fun setNotificationSoundEnabled(enabled: Boolean) {
+        NotificationPreferences.setSoundEnabled(getApplication(), enabled)
+        _isNotificationSoundEnabled.value = enabled
+    }
+
+    fun setWakeScreenEnabled(enabled: Boolean) {
+        NotificationPreferences.setWakeScreenEnabled(getApplication(), enabled)
+        _isWakeScreenEnabled.value = enabled
     }
 }

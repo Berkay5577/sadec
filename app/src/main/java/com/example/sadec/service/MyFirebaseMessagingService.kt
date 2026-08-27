@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.example.sadec.MainActivity
 import com.example.sadec.R
 import com.example.sadec.data.repository.FirestoreRepository
+import com.example.sadec.util.NotificationPreferences
 import com.example.sadec.util.SoundPlayer
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -40,15 +41,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
+        if (!NotificationPreferences.isDeviceNotificationsEnabled(this)) {
+            return
+        }
+
         val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "🔔 Yeni Sipariş Geldi!"
         val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: "Bir masa yeni sipariş verdi."
         val orderId = remoteMessage.data["orderId"]
 
         // 1. Ekranı Uyandır (WakeLock)
-        wakeUpDeviceScreen()
+        if (NotificationPreferences.isWakeScreenEnabled(this)) {
+            wakeUpDeviceScreen()
+        }
 
         // 2. Ses ve Titreşim Çal
-        SoundPlayer.playOrderAlert(this)
+        if (NotificationPreferences.isSoundEnabled(this)) {
+            SoundPlayer.playOrderAlert(this)
+        }
 
         // 3. Yüksek Öncelikli Kilit Ekranı Bildirimi Göster
         showNotification(title, body, orderId)

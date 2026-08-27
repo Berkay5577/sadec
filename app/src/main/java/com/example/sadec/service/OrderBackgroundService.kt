@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.example.sadec.MainActivity
 import com.example.sadec.R
 import com.example.sadec.data.model.Order
+import com.example.sadec.util.NotificationPreferences
 import com.example.sadec.util.SoundPlayer
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
@@ -157,11 +158,19 @@ class OrderBackgroundService : Service() {
     }
 
     private fun handleNewOrderNotification(order: Order) {
+        if (!NotificationPreferences.isDeviceNotificationsEnabled(this)) {
+            return
+        }
+
         // 1. EKRANI UYANDIR (Ekran kapalıysa açar)
-        wakeUpDeviceScreen()
+        if (NotificationPreferences.isWakeScreenEnabled(this)) {
+            wakeUpDeviceScreen()
+        }
 
         // 2. SES VE TİTREŞİM ÇAL
-        SoundPlayer.playOrderAlert(this)
+        if (NotificationPreferences.isSoundEnabled(this)) {
+            SoundPlayer.playOrderAlert(this)
+        }
 
         // 3. KİLİT EKRANI VE DURUM ÇUBUĞU BİLDİRİMİ GÖSTER
         showHighPriorityNotification(order)

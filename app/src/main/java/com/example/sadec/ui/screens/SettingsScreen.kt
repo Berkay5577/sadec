@@ -207,7 +207,139 @@ fun SettingsScreen(
                 }
             }
 
-            // 3. 🌟 QR MENÜ KAMPANYA POP-UP (DENEDİNİZ Mİ?) AYARLARI KARTI
+            // 3. 🔔 BU CİHAZDA BİLDİRİM VE SES AYARLARI KARTI
+            val isDeviceNotifEnabled by viewModel.isDeviceNotificationsEnabled.collectAsState()
+            val isNotifSoundEnabled by viewModel.isNotificationSoundEnabled.collectAsState()
+            val isWakeScreenEnabled by viewModel.isWakeScreenEnabled.collectAsState()
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                border = BorderStroke(1.5.dp, if (isDeviceNotifEnabled) WarmGold else ForestGreen.copy(alpha = 0.2f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Master Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(if (isDeviceNotifEnabled) ForestGreen else Slate100, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isDeviceNotifEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                                    contentDescription = null,
+                                    tint = if (isDeviceNotifEnabled) WarmGold else Slate500,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Bu Cihazda Bildirimler",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = ForestGreen
+                                )
+                                Text(
+                                    text = if (isDeviceNotifEnabled) "🟢 Açık (Siparişler Bu Telefona Düşer)" else "⚪ Kapalı (Bildirim Gönderilmez)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isDeviceNotifEnabled) SuccessGreen else Slate500
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isDeviceNotifEnabled,
+                            onCheckedChange = { viewModel.setDeviceNotificationsEnabled(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ForestGreen,
+                                checkedTrackColor = WarmGold,
+                                uncheckedThumbColor = Slate500,
+                                uncheckedTrackColor = Slate100
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Masalardan gelen yeni siparişlerin sadece bu kullanılan telefona bildirim ve ses olarak düşüp düşmeyeceğini kontrol edin.",
+                        fontSize = 12.sp,
+                        color = Slate500,
+                        lineHeight = 16.sp
+                    )
+
+                    if (isDeviceNotifEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Sub-switch 1: Sound
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Text("🔊", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Sipariş Alarm Sesi", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
+                                    Text("Yeni sipariş geldiğinde yüksek sesli uyarı çalar", fontSize = 11.sp, color = Slate500)
+                                }
+                            }
+                            Switch(
+                                checked = isNotifSoundEnabled,
+                                onCheckedChange = { viewModel.setNotificationSoundEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = ForestGreen,
+                                    checkedTrackColor = WarmGold,
+                                    uncheckedThumbColor = Slate500,
+                                    uncheckedTrackColor = Slate100
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Sub-switch 2: Screen Wake
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Text("💡", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Ekranı Otomatik Uyandır", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
+                                    Text("Telefon kapalıyken sipariş geldiğinde ekranı açar", fontSize = 11.sp, color = Slate500)
+                                }
+                            }
+                            Switch(
+                                checked = isWakeScreenEnabled,
+                                onCheckedChange = { viewModel.setWakeScreenEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = ForestGreen,
+                                    checkedTrackColor = WarmGold,
+                                    uncheckedThumbColor = Slate500,
+                                    uncheckedTrackColor = Slate100
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. 🌟 QR MENÜ KAMPANYA POP-UP (DENEDİNİZ Mİ?) AYARLARI KARTI
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),

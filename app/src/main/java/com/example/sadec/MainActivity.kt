@@ -31,6 +31,7 @@ import com.example.sadec.ui.MainScreen
 import com.example.sadec.ui.screens.LoginScreen
 import com.example.sadec.ui.theme.SadecTheme
 import com.example.sadec.ui.viewmodel.MainViewModel
+import com.example.sadec.util.NotificationPreferences
 
 class MainActivity : ComponentActivity() {
 
@@ -39,9 +40,10 @@ class MainActivity : ComponentActivity() {
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        NotificationPreferences.setPermissionAsked(this, true)
         if (isGranted) {
             val isLoggedIn = viewModel.isLoggedIn.value
-            if (isLoggedIn) {
+            if (isLoggedIn && NotificationPreferences.isDeviceNotificationsEnabled(this)) {
                 OrderBackgroundService.startService(this)
             }
         }
@@ -71,7 +73,8 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
 
-        askNotificationPermission()
+        // Sadece ilk defa açılışta ve bildirimler açıksa izin sor
+        askNotificationPermissionOnce()
         requestIgnoreBatteryOptimizations()
 
         setContent {
@@ -81,9 +84,10 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+                    val isDeviceNotificationsEnabled by viewModel.isDeviceNotificationsEnabled.collectAsState()
 
-                    LaunchedEffect(isLoggedIn) {
-                        if (isLoggedIn) {
+                    LaunchedEffect(isLoggedIn, isDeviceNotificationsEnabled) {
+                        if (isLoggedIn && isDeviceNotificationsEnabled) {
                             OrderBackgroundService.startService(this@MainActivity)
                         } else {
                             OrderBackgroundService.stopService(this@MainActivity)
@@ -102,7 +106,9 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(
                             viewModel = viewModel,
                             onLoginSuccess = {
-                                OrderBackgroundService.startService(this@MainActivity)
+                                if (NotificationPreferences.isDeviceNotificationsEnabled(this@MainActivity)) {
+                                    OrderBackgroundService.startService(this@MainActivity)
+                                }
                             }
                         )
                     }
@@ -111,14 +117,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun askNotificationPermission() {
+    private fun askNotificationPermissionOnce() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (NotificationPreferences.isDeviceNotificationsEnabled(this) && !NotificationPreferences.isPermissionAsked(this)) {
+                if (ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    NotificationPreferences.setPermissionAsked(this, true)
+                    requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
             }
         }
     }
