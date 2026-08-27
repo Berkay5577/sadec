@@ -280,11 +280,12 @@ fun DashboardScreen(
                         )
                     },
                     onShareDailyZReport = {
-                        shareDailyZReport(
+                        com.example.sadec.util.DailyZReportPdfGenerator.generateAndShareDailyZReportPdf(
                             context = context,
-                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze",
-                            todayOrders = completedOrders,
-                            productStats = productStats
+                            orders = completedOrders,
+                            productStats = productStats,
+                            tableStats = tableStats,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
                         )
                     },
                     onTriggerWeeklyReset = {
@@ -619,19 +620,21 @@ fun SalesAnalyticsTab(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Row 2: Z-Raporu Paylaş & Haftayı Kapat
+                    // Row 2: Z-Raporu PDF & Haftayı Kapat
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = onShareDailyZReport,
-                            modifier = Modifier.weight(1.2f).height(42.dp),
+                            modifier = Modifier.weight(1.3f).height(42.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                         ) {
-                            Text("🌙 Z-Raporu Paylaş 📤", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = WarmGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("🌙 Gün Sonu Z-Raporu (PDF)", color = WarmGold, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
