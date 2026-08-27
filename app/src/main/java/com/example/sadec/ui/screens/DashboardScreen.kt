@@ -1442,6 +1442,7 @@ fun SalesHistoryTab(
 // -------------------------------------------------------------
 // TAB 4: MANUAL CASH ENTRY (ELDEN KASA GİRİŞİ)
 // -------------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualCashEntryTab(
     menuItems: List<MenuItem>,
@@ -1449,9 +1450,12 @@ fun ManualCashEntryTab(
     onSaveManualOrder: (Order) -> Unit
 ) {
     var customerNameInput by remember { mutableStateOf("") }
+    var orderNoteInput by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedTableId by remember { mutableStateOf("table-kasa") }
     var selectedTableLabel by remember { mutableStateOf("KASA") }
+    var isTableDropdownExpanded by remember { mutableStateOf(false) }
+    var isImmediatePaid by remember { mutableStateOf(true) }
     var selectedPaymentMethod by remember { mutableStateOf("cash") }
     val cart = remember { mutableStateListOf<OrderItem>() }
 
@@ -1476,60 +1480,219 @@ fun ManualCashEntryTab(
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Manuel Kasa Satış Girişi", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
-                    Text("Garson veya kasiyer elden nakit/kart satışı doğrudan sisteme işleyebilir.", fontSize = 12.sp, color = Slate500)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(SoftMintGreen, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("➕", fontSize = 16.sp)
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Manuel Sipariş & Kasa Satışı", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
+                            Text("Masaya açık sipariş ekleyin veya kasadan peşin tahsilat yapın.", fontSize = 11.5.sp, color = Slate500)
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = ForestGreen.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    OutlinedTextField(
-                        value = customerNameInput,
-                        onValueChange = { customerNameInput = it },
-                        label = { Text("Müşteri Adı (İsteğe Bağlı)") },
-                        placeholder = { Text("Örn: Ahmet Bey") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    // 1. MASA / KONUM SEÇİMİ (DROPDOWN + HIZLI ÇİPLER)
+                    Text("📍 Siparişin Verileceği Masa / Konum:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("Ödeme Yöntemi:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ExposedDropdownMenuBox(
+                        expanded = isTableDropdownExpanded,
+                        onExpandedChange = { isTableDropdownExpanded = it }
                     ) {
-                        listOf(
-                            Triple("cash", "💵 Nakit", "cash"),
-                            Triple("card", "💳 Kart", "card"),
-                            Triple("transfer", "📲 Havale", "transfer"),
-                            Triple("complimentary", "🎁 İkram", "complimentary")
-                        ).forEach { (id, label, _) ->
-                            FilterChip(
-                                selected = selectedPaymentMethod == id,
-                                onClick = { selectedPaymentMethod = id },
-                                label = { Text(label, fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ForestGreen, selectedLabelColor = WarmGold)
+                        OutlinedTextField(
+                            value = if (selectedTableId == "table-kasa") "🏢 KASA / AL-GÖTÜR" else "🪑 $selectedTableLabel",
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isTableDropdownExpanded) },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ForestGreen,
+                                unfocusedBorderColor = ForestGreen.copy(alpha = 0.3f),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
                             )
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isTableDropdownExpanded,
+                            onDismissRequest = { isTableDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("🏢 KASA / AL-GÖTÜR", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                                onClick = {
+                                    selectedTableId = "table-kasa"
+                                    selectedTableLabel = "KASA"
+                                    isImmediatePaid = true
+                                    isTableDropdownExpanded = false
+                                }
+                            )
+                            tables.forEach { table ->
+                                DropdownMenuItem(
+                                    text = { Text("🪑 ${table.label}") },
+                                    onClick = {
+                                        selectedTableId = table.id
+                                        selectedTableLabel = table.label
+                                        isImmediatePaid = false
+                                        isTableDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text("Masa / Konum:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    // Hızlı Masa Çipleri (Yatay Kaydırmalı)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        FilterChip(
-                            selected = true,
-                            onClick = {
-                                selectedTableId = "table-kasa"
-                                selectedTableLabel = "KASA"
-                            },
-                            label = { Text("🏢 KASA", fontSize = 11.5.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = ForestGreen,
-                                selectedLabelColor = WarmGold
+                        item {
+                            FilterChip(
+                                selected = selectedTableId == "table-kasa",
+                                onClick = {
+                                    selectedTableId = "table-kasa"
+                                    selectedTableLabel = "KASA"
+                                    isImmediatePaid = true
+                                },
+                                label = { Text("🏢 KASA", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ForestGreen,
+                                    selectedLabelColor = WarmGold
+                                )
                             )
+                        }
+                        items(tables) { table ->
+                            FilterChip(
+                                selected = selectedTableId == table.id,
+                                onClick = {
+                                    selectedTableId = table.id
+                                    selectedTableLabel = table.label
+                                    isImmediatePaid = false
+                                },
+                                label = { Text(table.label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = ForestGreen,
+                                    selectedLabelColor = WarmGold
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 2. SİPARİŞ & ÖDEME TÜRÜ (AÇIK HESAP / ANINDA PEŞİN)
+                    Text("💳 Sipariş Durumu & Tahsilat:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Masaya Açık Sipariş
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { isImmediatePaid = false },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (!isImmediatePaid) ForestGreen.copy(alpha = 0.08f) else Color(0xFFF8FAF9)
+                            ),
+                            border = BorderStroke(
+                                1.5.dp,
+                                if (!isImmediatePaid) ForestGreen else Color.LightGray.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("📋 Masaya Açık Hesap", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
+                                Text("Ödeme kalkışta alınacak", fontSize = 10.sp, color = Slate500)
+                            }
+                        }
+
+                        // Anında Peşin Ödeme
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { isImmediatePaid = true },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isImmediatePaid) WarmGold.copy(alpha = 0.12f) else Color(0xFFF8FAF9)
+                            ),
+                            border = BorderStroke(
+                                1.5.dp,
+                                if (isImmediatePaid) WarmGold else Color.LightGray.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("💵 Anında Peşin Ödeme", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ForestGreen)
+                                Text("Hesap hemen kapanır", fontSize = 10.sp, color = Slate500)
+                            }
+                        }
+                    }
+
+                    // Ödeme Yöntemleri (Sadece Anında Peşin seçiliyse)
+                    if (isImmediatePaid) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Tahsilat Yöntemi:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                Triple("cash", "💵 Nakit", "cash"),
+                                Triple("card", "💳 Kart", "card"),
+                                Triple("transfer", "📲 Havale", "transfer"),
+                                Triple("complimentary", "🎁 İkram", "complimentary")
+                            ).forEach { (id, label, _) ->
+                                FilterChip(
+                                    selected = selectedPaymentMethod == id,
+                                    onClick = { selectedPaymentMethod = id },
+                                    label = { Text(label, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = ForestGreen,
+                                        selectedLabelColor = WarmGold
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 3. MÜŞTERİ ADI VE SİPARİŞ NOTU
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = customerNameInput,
+                            onValueChange = { customerNameInput = it },
+                            label = { Text("Müşteri Adı (Opsiyonel)") },
+                            placeholder = { Text("Örn: Ahmet Bey") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = orderNoteInput,
+                            onValueChange = { orderNoteInput = it },
+                            label = { Text("Sipariş Notu") },
+                            placeholder = { Text("Örn: Az şekerli") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -1590,11 +1753,15 @@ fun ManualCashEntryTab(
         }
 
         items(filteredMenuItems) { item ->
+            val inCartCount = cart.filter { it.menuItemId == item.id }.sumOf { it.quantity }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(
+                    containerColor = if (inCartCount > 0) SoftMintGreen.copy(alpha = 0.5f) else Color.White
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                border = if (inCartCount > 0) BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f)) else null
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -1606,30 +1773,66 @@ fun ManualCashEntryTab(
                         Text("₺${"%.2f".format(item.price)}", fontSize = 13.sp, color = WarmGold, fontWeight = FontWeight.Bold)
                     }
 
-                    Button(
-                        onClick = {
-                            val existing = cart.indexOfFirst { it.menuItemId == item.id }
-                            if (existing > -1) {
-                                val cur = cart[existing]
-                                cart[existing] = cur.copy(quantity = cur.quantity + 1)
-                            } else {
+                    if (inCartCount > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    val idx = cart.indexOfFirst { it.menuItemId == item.id }
+                                    if (idx > -1) {
+                                        val cur = cart[idx]
+                                        if (cur.quantity > 1) {
+                                            cart[idx] = cur.copy(quantity = cur.quantity - 1)
+                                        } else {
+                                            cart.removeAt(idx)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                            }
+
+                            Text(
+                                text = "$inCartCount",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = ForestGreen,
+                                modifier = Modifier.padding(horizontal = 6.dp)
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    val idx = cart.indexOfFirst { it.menuItemId == item.id }
+                                    if (idx > -1) {
+                                        val cur = cart[idx]
+                                        cart[idx] = cur.copy(quantity = cur.quantity + 1)
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = {
                                 cart.add(
                                     OrderItem(
                                         menuItemId = item.id,
                                         name = item.name,
                                         quantity = 1,
                                         unitPrice = item.price,
-                                        isPaid = true,
-                                        paymentMethod = selectedPaymentMethod
+                                        isPaid = isImmediatePaid,
+                                        paymentMethod = if (isImmediatePaid) selectedPaymentMethod else ""
                                     )
                                 )
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text("+ Ekle", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("+ Ekle", color = WarmGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -1643,15 +1846,32 @@ fun ManualCashEntryTab(
                     colors = CardDefaults.cardColors(containerColor = SoftMintGreen)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Seçilen Ürünler (Sepet)", fontWeight = FontWeight.Bold, color = ForestGreen)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🛒 Seçilen Ürünler (Sepet)", fontWeight = FontWeight.Bold, color = ForestGreen)
+                            Text(
+                                text = if (selectedTableId == "table-kasa") "🏢 KASA" else "🪑 $selectedTableLabel",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ForestGreen
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        cart.forEach { cItem ->
+                        cart.forEachIndexed { index, cItem ->
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("${cItem.quantity}x ${cItem.name}", fontSize = 13.sp, color = ForestGreen)
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Text("${cItem.quantity}x", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(cItem.name, fontSize = 13.sp, color = ForestGreen)
+                                }
                                 Text("₺${"%.2f".format(cItem.unitPrice * cItem.quantity)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WarmGold)
                             }
                         }
@@ -1664,25 +1884,28 @@ fun ManualCashEntryTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Toplam:", fontWeight = FontWeight.Bold, color = ForestGreen)
+                            Text("Toplam Tutar:", fontWeight = FontWeight.Bold, color = ForestGreen)
                             Text("₺${"%.2f".format(totalCart)}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = WarmGold)
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Button(
                             onClick = {
                                 val newOrder = Order(
                                     tableId = selectedTableId.ifBlank { "table-kasa" },
                                     tableLabel = selectedTableLabel.ifBlank { "KASA" },
-                                    customerName = customerNameInput.ifBlank { "Elden Müşteri" },
-                                    status = "delivered",
-                                    paymentMethod = selectedPaymentMethod,
+                                    customerName = customerNameInput.ifBlank {
+                                        if (selectedTableId == "table-kasa") "Kasa Müşterisi" else "Garson Siparişi"
+                                    },
+                                    status = if (isImmediatePaid) "delivered" else "pending",
+                                    paymentMethod = if (isImmediatePaid) selectedPaymentMethod else "",
+                                    note = orderNoteInput.trim(),
                                     items = cart.map {
                                         it.copy(
-                                            isPaid = true,
-                                            paymentMethod = selectedPaymentMethod,
-                                            paidAt = System.currentTimeMillis()
+                                            isPaid = isImmediatePaid,
+                                            paymentMethod = if (isImmediatePaid) selectedPaymentMethod else "",
+                                            paidAt = if (isImmediatePaid) System.currentTimeMillis() else null
                                         )
                                     },
                                     totalPrice = totalCart
@@ -1690,12 +1913,21 @@ fun ManualCashEntryTab(
                                 onSaveManualOrder(newOrder)
                                 cart.clear()
                                 customerNameInput = ""
+                                orderNoteInput = ""
                             },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
                         ) {
-                            Text("Satışı Tamamla & Kasaya İşle 💳", color = WarmGold, fontWeight = FontWeight.Bold)
+                            if (isImmediatePaid) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null, tint = WarmGold)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Satışı Tamamla & Kasaya İşle 💳 (₺${"%.2f".format(totalCart)})", color = WarmGold, fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(Icons.Default.Send, contentDescription = null, tint = WarmGold)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("${selectedTableLabel} Masasına Siparişi Gönder 🚀", color = WarmGold, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

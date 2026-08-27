@@ -420,9 +420,13 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             val res = firestoreRepository.createOrder(_restaurantId.value, order)
             res.onSuccess {
-                _uiMessage.emit("Manuel satış kaydedildi ve kasaya işlendi! 💳✅")
+                if (order.status == "pending" || order.status == "preparing") {
+                    _uiMessage.emit("${order.tableLabel} için sipariş başarıyla açıldı! 📋✨")
+                } else {
+                    _uiMessage.emit("Satış tamamlandı ve kasaya işlendi! 💳✅")
+                }
             }.onFailure {
-                _uiMessage.emit("Satış kaydedilemedi: ${it.localizedMessage}")
+                _uiMessage.emit("Sipariş kaydedilemedi: ${it.localizedMessage}")
             }
         }
     }
