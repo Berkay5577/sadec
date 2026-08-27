@@ -6,6 +6,7 @@ import android.graphics.*
 import android.graphics.pdf.PdfDocument
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.example.sadec.R
 import com.example.sadec.data.model.TableItem
 import java.io.File
 import java.io.FileOutputStream
@@ -15,6 +16,7 @@ object QrPdfGenerator {
     /**
      * Generates a luxury, high-resolution printable PDF containing QR stand cards for all tables.
      * Automatically formats and fits all table QR stands into exactly 2 printable A4 pages.
+     * Includes the official Sade.C logo in both the header and the QR code center.
      */
     fun generateAndSharePdf(
         context: Context,
@@ -38,6 +40,13 @@ object QrPdfGenerator {
             val colorSageGreen = 0xFF2D5341.toInt()
             val colorWarmGold = 0xFFC59F60.toInt()
             val colorBgCream = 0xFFFAF8F5.toInt()
+
+            // Decode official Sade.C Logo
+            val logoBitmap = try {
+                BitmapFactory.decodeResource(context.resources, R.drawable.sadec_logo)
+            } catch (e: Exception) {
+                null
+            }
 
             // Natural alphanumeric sort for tables (e.g. BAR, DIŞ 1, DIŞ 2, İÇ 1...)
             val sortedTables = tables.sortedWith { t1, t2 ->
@@ -96,11 +105,11 @@ object QrPdfGenerator {
 
             // Geometry calculations
             val pageMarginH = 26f
-            val pageMarginV = 28f
+            val pageMarginV = 26f
             val colSpacing = 16f
             val rowSpacing = when (rowsCount) {
-                2 -> 22f
-                3 -> 14f
+                2 -> 20f
+                3 -> 12f
                 else -> 10f
             }
 
@@ -157,35 +166,54 @@ object QrPdfGenerator {
                     )
                     canvas.drawRoundRect(innerRect, 12f, 12f, innerBorderPaint)
 
-                    // 2. Card Content Layout based on rowsCount
+                    // 2. Card Content Layout with Logo based on rowsCount
                     val cardCenterX = cardLeft + (cardWidth / 2f)
 
                     when (rowsCount) {
                         2 -> {
-                            // LARGE 2x2 LAYOUT (~370pt height)
+                            // LARGE 2x2 LAYOUT (~374pt height)
+                            // A) Header Logo
+                            if (logoBitmap != null) {
+                                val logoDiameter = 36f
+                                val logoRect = RectF(
+                                    cardCenterX - (logoDiameter / 2f),
+                                    cardTop + 14f,
+                                    cardCenterX + (logoDiameter / 2f),
+                                    cardTop + 14f + logoDiameter
+                                )
+                                drawCircularBitmap(
+                                    canvas,
+                                    logoBitmap,
+                                    logoRect,
+                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 1f; isAntiAlias = true }
+                                )
+                            }
+
+                            // B) Title & Subtitle
                             val titlePaint = Paint().apply {
                                 color = colorForestGreen
-                                textSize = 17f
+                                textSize = 16f
                                 typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText(restaurantName.uppercase(), cardCenterX, cardTop + 30f, titlePaint)
+                            val titleY = if (logoBitmap != null) cardTop + 64f else cardTop + 30f
+                            canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
                             val subPaint = Paint().apply {
                                 color = colorWarmGold
-                                textSize = 8.5f
+                                textSize = 8f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                                 letterSpacing = 0.15f
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, cardTop + 44f, subPaint)
+                            canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, titleY + 13f, subPaint)
 
-                            // QR Code (165pt)
-                            val qrSize = 165f
+                            // C) QR Code with embedded center logo (155pt)
+                            val qrSize = 155f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
-                            val qrTop = cardTop + 56f
+                            val qrTop = titleY + 22f
                             val qrDestRect = RectF(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize)
 
                             val qrBgRect = RectF(qrLeft - 6f, qrTop - 6f, qrLeft + qrSize + 6f, qrTop + qrSize + 6f)
@@ -196,66 +224,105 @@ object QrPdfGenerator {
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 400)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
+
+                                // Draw small center logo on QR code
+                                if (logoBitmap != null) {
+                                    val qrCenterLogoSize = 34f
+                                    val qrCenterRect = RectF(
+                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
+                                    )
+                                    // White background behind center logo
+                                    val centerBgRect = RectF(qrCenterRect.left - 2f, qrCenterRect.top - 2f, qrCenterRect.right + 2f, qrCenterRect.bottom + 2f)
+                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
+                                    drawCircularBitmap(
+                                        canvas,
+                                        logoBitmap,
+                                        qrCenterRect,
+                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 1f; isAntiAlias = true }
+                                    )
+                                }
                             }
 
-                            // Table Badge
+                            // D) Table Badge
                             val badgeW = 200f
-                            val badgeH = 44f
-                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), cardTop + 242f, cardCenterX + (badgeW / 2f), cardTop + 242f + badgeH)
-                            canvas.drawRoundRect(badgeRect, 14f, 14f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
+                            val badgeH = 40f
+                            val badgeY = qrTop + qrSize + 14f
+                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), badgeY, cardCenterX + (badgeW / 2f), badgeY + badgeH)
+                            canvas.drawRoundRect(badgeRect, 12f, 12f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
 
                             val tableTextPaint = Paint().apply {
                                 color = Color.WHITE
-                                textSize = 20f
+                                textSize = 19f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, cardTop + 271f, tableTextPaint)
+                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, badgeY + 27f, tableTextPaint)
 
-                            // Footers
+                            // E) Footers
                             val instructionPaint = Paint().apply {
                                 color = colorSageGreen
-                                textSize = 9.5f
+                                textSize = 9f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("📱 Kameranız ile okutarak sipariş verebilirsiniz.", cardCenterX, cardTop + 310f, instructionPaint)
+                            canvas.drawText("📱 Telefonunuzun kamerası ile QR kodu okutun", cardCenterX, badgeY + badgeH + 18f, instructionPaint)
 
                             val securityPaint = Paint().apply {
                                 color = Color.GRAY
-                                textSize = 8f
+                                textSize = 7.5f
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("Kod: ${table.qrKey.ifBlank { table.id }}", cardCenterX, cardTop + 326f, securityPaint)
+                            canvas.drawText("Güvenli Kod: ${table.qrKey.ifBlank { table.id }}", cardCenterX, badgeY + badgeH + 31f, securityPaint)
                         }
                         3 -> {
-                            // COMPACT 2x3 LAYOUT (~246pt height)
+                            // COMPACT 2x3 LAYOUT (~248pt height)
+                            // A) Header Logo & Title
+                            if (logoBitmap != null) {
+                                val logoDiameter = 24f
+                                val logoRect = RectF(
+                                    cardCenterX - (logoDiameter / 2f),
+                                    cardTop + 8f,
+                                    cardCenterX + (logoDiameter / 2f),
+                                    cardTop + 8f + logoDiameter
+                                )
+                                drawCircularBitmap(
+                                    canvas,
+                                    logoBitmap,
+                                    logoRect,
+                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.8f; isAntiAlias = true }
+                                )
+                            }
+
                             val titlePaint = Paint().apply {
                                 color = colorForestGreen
-                                textSize = 13.5f
+                                textSize = 12.5f
                                 typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText(restaurantName.uppercase(), cardCenterX, cardTop + 20f, titlePaint)
+                            val titleY = if (logoBitmap != null) cardTop + 43f else cardTop + 20f
+                            canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
                             val subPaint = Paint().apply {
                                 color = colorWarmGold
-                                textSize = 7f
+                                textSize = 6.5f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-                                letterSpacing = 0.12f
+                                letterSpacing = 0.1f
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, cardTop + 31f, subPaint)
+                            canvas.drawText("KAHVENİN EN SAF HALİ • GERZE", cardCenterX, titleY + 10f, subPaint)
 
-                            // QR Code (115pt)
-                            val qrSize = 115f
+                            // B) QR Code (105pt) with embedded logo
+                            val qrSize = 105f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
-                            val qrTop = cardTop + 40f
+                            val qrTop = titleY + 16f
                             val qrDestRect = RectF(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize)
 
                             val qrBgRect = RectF(qrLeft - 4f, qrTop - 4f, qrLeft + qrSize + 4f, qrTop + qrSize + 4f)
@@ -266,24 +333,43 @@ object QrPdfGenerator {
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 300)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
+
+                                if (logoBitmap != null) {
+                                    val qrCenterLogoSize = 24f
+                                    val qrCenterRect = RectF(
+                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
+                                    )
+                                    val centerBgRect = RectF(qrCenterRect.left - 1.5f, qrCenterRect.top - 1.5f, qrCenterRect.right + 1.5f, qrCenterRect.bottom + 1.5f)
+                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
+                                    drawCircularBitmap(
+                                        canvas,
+                                        logoBitmap,
+                                        qrCenterRect,
+                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.8f; isAntiAlias = true }
+                                    )
+                                }
                             }
 
-                            // Table Badge
+                            // C) Table Badge
                             val badgeW = 160f
-                            val badgeH = 30f
-                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), cardTop + 168f, cardCenterX + (badgeW / 2f), cardTop + 168f + badgeH)
-                            canvas.drawRoundRect(badgeRect, 10f, 10f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
+                            val badgeH = 28f
+                            val badgeY = qrTop + qrSize + 8f
+                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), badgeY, cardCenterX + (badgeW / 2f), badgeY + badgeH)
+                            canvas.drawRoundRect(badgeRect, 8f, 8f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
 
                             val tableTextPaint = Paint().apply {
                                 color = Color.WHITE
-                                textSize = 14.5f
+                                textSize = 14f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, cardTop + 188f, tableTextPaint)
+                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, badgeY + 19f, tableTextPaint)
 
-                            // Footers
+                            // D) Footers
                             val instructionPaint = Paint().apply {
                                 color = colorSageGreen
                                 textSize = 7.5f
@@ -291,57 +377,93 @@ object QrPdfGenerator {
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("📱 Kameranız ile QR okutarak sipariş verin", cardCenterX, cardTop + 214f, instructionPaint)
+                            canvas.drawText("📱 Kameranız ile QR okutarak sipariş verin", cardCenterX, badgeY + badgeH + 12f, instructionPaint)
 
                             val securityPaint = Paint().apply {
                                 color = Color.GRAY
-                                textSize = 6.5f
+                                textSize = 6f
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("Güvenli Kod: ${table.qrKey.ifBlank { table.id }}", cardCenterX, cardTop + 226f, securityPaint)
+                            canvas.drawText("Kod: ${table.qrKey.ifBlank { table.id }}", cardCenterX, badgeY + badgeH + 22f, securityPaint)
                         }
                         else -> {
                             // DENSE 2x4 LAYOUT (~184pt height)
+                            if (logoBitmap != null) {
+                                val logoDiameter = 18f
+                                val logoRect = RectF(
+                                    cardCenterX - (logoDiameter / 2f),
+                                    cardTop + 6f,
+                                    cardCenterX + (logoDiameter / 2f),
+                                    cardTop + 6f + logoDiameter
+                                )
+                                drawCircularBitmap(
+                                    canvas,
+                                    logoBitmap,
+                                    logoRect,
+                                    Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.6f; isAntiAlias = true }
+                                )
+                            }
+
                             val titlePaint = Paint().apply {
                                 color = colorForestGreen
-                                textSize = 11.5f
+                                textSize = 11f
                                 typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText(restaurantName.uppercase(), cardCenterX, cardTop + 16f, titlePaint)
+                            val titleY = if (logoBitmap != null) cardTop + 33f else cardTop + 16f
+                            canvas.drawText(restaurantName.uppercase(), cardCenterX, titleY, titlePaint)
 
-                            // QR Code (88pt)
-                            val qrSize = 88f
+                            // QR Code (80pt)
+                            val qrSize = 80f
                             val qrLeft = cardLeft + (cardWidth - qrSize) / 2f
-                            val qrTop = cardTop + 24f
+                            val qrTop = titleY + 6f
                             val qrDestRect = RectF(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize)
 
                             val qrBgRect = RectF(qrLeft - 3f, qrTop - 3f, qrLeft + qrSize + 3f, qrTop + qrSize + 3f)
-                            canvas.drawRoundRect(qrBgRect, 8f, 8f, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
-                            canvas.drawRoundRect(qrBgRect, 8f, 8f, Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.8f; isAntiAlias = true })
+                            canvas.drawRoundRect(qrBgRect, 6f, 6f, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
+                            canvas.drawRoundRect(qrBgRect, 6f, 6f, Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.6f; isAntiAlias = true })
 
                             val qrUrl = "$baseUrl?restId=$restaurantId&tableId=${table.id}&key=${table.qrKey}"
                             val qrBitmap = QrCodeGenerator.generateQrBitmap(qrUrl, 250)
                             if (qrBitmap != null) {
                                 canvas.drawBitmap(qrBitmap, null, qrDestRect, Paint(Paint.FILTER_BITMAP_FLAG))
+
+                                if (logoBitmap != null) {
+                                    val qrCenterLogoSize = 18f
+                                    val qrCenterRect = RectF(
+                                        qrLeft + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize - qrCenterLogoSize) / 2f,
+                                        qrLeft + (qrSize + qrCenterLogoSize) / 2f,
+                                        qrTop + (qrSize + qrCenterLogoSize) / 2f
+                                    )
+                                    val centerBgRect = RectF(qrCenterRect.left - 1f, qrCenterRect.top - 1f, qrCenterRect.right + 1f, qrCenterRect.bottom + 1f)
+                                    canvas.drawOval(centerBgRect, Paint().apply { color = Color.WHITE; style = Paint.Style.FILL; isAntiAlias = true })
+                                    drawCircularBitmap(
+                                        canvas,
+                                        logoBitmap,
+                                        qrCenterRect,
+                                        Paint().apply { color = colorWarmGold; style = Paint.Style.STROKE; strokeWidth = 0.6f; isAntiAlias = true }
+                                    )
+                                }
                             }
 
                             // Table Badge
                             val badgeW = 140f
-                            val badgeH = 24f
-                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), cardTop + 122f, cardCenterX + (badgeW / 2f), cardTop + 122f + badgeH)
-                            canvas.drawRoundRect(badgeRect, 8f, 8f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
+                            val badgeH = 22f
+                            val badgeY = qrTop + qrSize + 6f
+                            val badgeRect = RectF(cardCenterX - (badgeW / 2f), badgeY, cardCenterX + (badgeW / 2f), badgeY + badgeH)
+                            canvas.drawRoundRect(badgeRect, 6f, 6f, Paint().apply { color = colorForestGreen; style = Paint.Style.FILL; isAntiAlias = true })
 
                             val tableTextPaint = Paint().apply {
                                 color = Color.WHITE
-                                textSize = 12f
+                                textSize = 11.5f
                                 typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, cardTop + 138f, tableTextPaint)
+                            canvas.drawText("MASA: ${table.label.uppercase()}", cardCenterX, badgeY + 15f, tableTextPaint)
 
                             // Footers
                             val instructionPaint = Paint().apply {
@@ -351,15 +473,7 @@ object QrPdfGenerator {
                                 textAlign = Paint.Align.CENTER
                                 isAntiAlias = true
                             }
-                            canvas.drawText("📱 QR okutarak sipariş verin", cardCenterX, cardTop + 158f, instructionPaint)
-
-                            val securityPaint = Paint().apply {
-                                color = Color.GRAY
-                                textSize = 5.5f
-                                textAlign = Paint.Align.CENTER
-                                isAntiAlias = true
-                            }
-                            canvas.drawText("Kod: ${table.qrKey.ifBlank { table.id }}", cardCenterX, cardTop + 168f, securityPaint)
+                            canvas.drawText("📱 QR okutarak sipariş verin", cardCenterX, badgeY + badgeH + 9f, instructionPaint)
                         }
                     }
                 }
@@ -372,12 +486,12 @@ object QrPdfGenerator {
                     pathEffect = DashPathEffect(floatArrayOf(6f, 6f), 0f)
                 }
                 val midX = pageMarginH + cardWidth + (colSpacing / 2f)
-                canvas.drawLine(midX, pageMarginV - 8f, midX, pageHeight - pageMarginV - 10f, cutLinePaint)
+                canvas.drawLine(midX, pageMarginV - 6f, midX, pageHeight - pageMarginV - 8f, cutLinePaint)
 
                 // Dotted cutting lines between rows
                 for (r in 1 until rowsCount) {
                     val midY = pageMarginV + r * cardHeight + (r - 0.5f) * rowSpacing
-                    canvas.drawLine(pageMarginH - 8f, midY, pageWidth - pageMarginH + 8f, midY, cutLinePaint)
+                    canvas.drawLine(pageMarginH - 6f, midY, pageWidth - pageMarginH + 6f, midY, cutLinePaint)
                 }
 
                 // Page Footer info
@@ -390,7 +504,7 @@ object QrPdfGenerator {
                 canvas.drawText(
                     "Sayfa ${pageIndex + 1} / $totalPages • $restaurantName Masa QR Standları • Toplam $totalTables Masa",
                     pageWidth / 2f,
-                    pageHeight - 12f,
+                    pageHeight - 10f,
                     pageFooterPaint
                 )
 
@@ -416,7 +530,7 @@ object QrPdfGenerator {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, contentUri)
                 putExtra(Intent.EXTRA_SUBJECT, "$restaurantName - Masa QR Kodları")
-                putExtra(Intent.EXTRA_TEXT, "$restaurantName tüm masalar için 2 sayfalık A4 baskı QR kod PDF çıktısı.")
+                putExtra(Intent.EXTRA_TEXT, "$restaurantName tüm masalar için logolu ve 2 sayfalık A4 baskı QR kod PDF çıktısı.")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
@@ -427,6 +541,19 @@ object QrPdfGenerator {
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(context, "PDF oluşturulurken hata: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun drawCircularBitmap(canvas: Canvas, bitmap: Bitmap, destRect: RectF, borderPaint: Paint? = null) {
+        val saveCount = canvas.save()
+        val path = Path().apply {
+            addOval(destRect, Path.Direction.CW)
+        }
+        canvas.clipPath(path)
+        canvas.drawBitmap(bitmap, null, destRect, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        canvas.restoreToCount(saveCount)
+        if (borderPaint != null) {
+            canvas.drawOval(destRect, borderPaint)
         }
     }
 }
