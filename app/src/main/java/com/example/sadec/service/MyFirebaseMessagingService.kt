@@ -1,5 +1,6 @@
 package com.example.sadec.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.example.sadec.MainActivity
 import com.example.sadec.R
@@ -42,11 +44,32 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: "Bir masa yeni sipariş verdi."
         val orderId = remoteMessage.data["orderId"]
 
-        // Play Sound and Vibration
+        // 1. Ekranı Uyandır (WakeLock)
+        wakeUpDeviceScreen()
+
+        // 2. Ses ve Titreşim Çal
         SoundPlayer.playOrderAlert(this)
 
-        // Show system notification
+        // 3. Yüksek Öncelikli Kilit Ekranı Bildirimi Göster
         showNotification(title, body, orderId)
+    }
+
+    private fun wakeUpDeviceScreen() {
+        try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager != null) {
+                @Suppress("DEPRECATION")
+                val wakeLock = powerManager.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                            PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                            PowerManager.ON_AFTER_RELEASE,
+                    "sadec:FCMOrderWakeLock"
+                )
+                wakeLock.acquire(10000)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun showNotification(title: String, body: String, orderId: String?) {
@@ -57,17 +80,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setUsage(AudioAttributes.USAGE_ALARM)
                 .build()
 
             val channel = NotificationChannel(
                 channelId,
-                "Sipariş Bildirimleri",
+                "Sipariş Bildirimleri (Kilit Ekranı)",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Yeni gelen masa siparişleri için anlık uyarılar"
+                description = "Yeni gelen masa siparişleri için anlık yüksek sesli uyarılar"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 800)
                 setSound(soundUri, audioAttributes)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                enableLights(true)
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -79,18 +105,23 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            System.currentTimeMillis().toInt(),
             intent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$body\n\nDetayları görmek için dokunun."))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(pendingIntent, true)
             .setContentIntent(pendingIntent)
+            .setVibrate(longArrayOf(0, 500, 200, 500, 200, 800))
             .build()
 
         notificationManager.notify(System.currentTimeMillis().toInt(), notification)
