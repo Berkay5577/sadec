@@ -75,12 +75,12 @@ fun DashboardScreen(
 
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf(
-        Pair("📊 Genel Analiz", Icons.Default.Analytics),
-        Pair("📅 Gün Gün Kasa", Icons.Default.CalendarViewWeek),
-        Pair("📍 Masalar", Icons.Default.TableBar),
-        Pair("📜 Adisyonlar", Icons.Default.ReceiptLong),
-        Pair("➕ Manuel Satış", Icons.Default.PointOfSale)
+        "📊 Özet",
+        "📅 Günler",
+        "📍 Masalar",
+        "📜 Adisyonlar"
     )
+    var showManualCashSheet by remember { mutableStateOf(false) }
 
     // Weekly Period Label
     val cal = Calendar.getInstance()
@@ -326,35 +326,26 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Secondary Sub-Tabs (Scrollable)
-                    ScrollableTabRow(
+                    // Sabit 4'lü Tab Bar (Asla sağdan kesilmez veya taşmaz)
+                    TabRow(
                         selectedTabIndex = selectedTab,
                         containerColor = Color.Transparent,
                         contentColor = ForestGreen,
-                        edgePadding = 16.dp,
                         divider = {}
                     ) {
-                        tabs.forEachIndexed { index, (title, icon) ->
+                        tabs.forEachIndexed { index, title ->
                             val isTabSelected = selectedTab == index
                             Tab(
                                 selected = isTabSelected,
                                 onClick = { selectedTab = index },
                                 text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (isTabSelected) ForestGreen else Slate500
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = title,
-                                            fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 12.5.sp,
-                                            color = if (isTabSelected) ForestGreen else Slate500
-                                        )
-                                    }
+                                    Text(
+                                        text = title,
+                                        fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 12.5.sp,
+                                        color = if (isTabSelected) ForestGreen else Slate500,
+                                        maxLines = 1
+                                    )
                                 }
                             )
                         }
@@ -397,6 +388,9 @@ fun DashboardScreen(
                     onTriggerWeeklyReset = {
                         showWeeklyResetDialog = true
                         hasDownloadedPdf = false
+                    },
+                    onOpenManualCash = {
+                        showManualCashSheet = true
                     }
                 )
                 1 -> DayByDayWeeklyTab(
@@ -616,6 +610,23 @@ fun DashboardScreen(
                 }
             )
         }
+
+        // ➕ MANUEL SATIŞ BOTTOM SHEET
+        if (showManualCashSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showManualCashSheet = false },
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                ManualCashEntryTab(
+                    menuItems = menuItems,
+                    tables = tables,
+                    onSaveManualOrder = { order ->
+                        viewModel.createManualOrder(order)
+                        showManualCashSheet = false
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -637,7 +648,8 @@ fun SalesAnalyticsTab(
     onExportExcel: () -> Unit,
     onExportPdf: () -> Unit,
     onOpenZReportConfirm: () -> Unit,
-    onTriggerWeeklyReset: () -> Unit
+    onTriggerWeeklyReset: () -> Unit,
+    onOpenManualCash: () -> Unit
 ) {
     val periodLabel = when (dateFilterIndex) {
         0 -> "BUGÜNÜN NET CİROSU"
@@ -925,6 +937,20 @@ fun SalesAnalyticsTab(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Haftalık PDF", color = ForestGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Manuel Satış Girişi Butonu
+                    Button(
+                        onClick = onOpenManualCash,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SageGreen)
+                    ) {
+                        Icon(Icons.Default.PointOfSale, contentDescription = null, tint = WarmGold, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("➕ Manuel Kasa Satışı Yap", color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
