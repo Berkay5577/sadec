@@ -78,7 +78,7 @@ fun DashboardScreen(
         "Özet",
         "Günler",
         "Masalar",
-        "Adisyonlar"
+        "Adisyon"
     )
     var showManualCashSheet by remember { mutableStateOf(false) }
 
@@ -342,7 +342,7 @@ fun DashboardScreen(
                                     Text(
                                         text = title,
                                         fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 13.5.sp,
+                                        fontSize = 12.5.sp,
                                         color = if (isTabSelected) ForestGreen else Slate500,
                                         maxLines = 1
                                     )
