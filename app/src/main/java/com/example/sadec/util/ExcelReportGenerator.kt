@@ -23,6 +23,8 @@ object ExcelReportGenerator {
      * - Müşteri Adı (Kim tarafından sipariş edildi)
      * - Sipariş Edilen Ürünler ve Kalemler
      * - Kaç Adet Sipariş Edildi
+     * - Ödeme Yöntemi (Nakit, Kredi Kartı, Havale, İkram)
+     * - İndirim / İkram Tutarı (TL)
      * - Tahsilat Tutarı (₺)
      * - Ödeme Durumu
      * - Sipariş Notu
@@ -65,10 +67,14 @@ object ExcelReportGenerator {
             writer.write("\"Toplam Adisyon Sayısı:\";\"${completedOrders.size} Adet\"\n\n")
 
             // Column Headers
-            writer.write("\"Sıra No\";\"Satış Tarihi\";\"Satış Saati\";\"Masa\";\"Müşteri Adı\";\"Sipariş Edilen Ürünler\";\"Toplam Ürün Adedi\";\"Tahsilat Tutarı (TL)\";\"Ödeme Durumu\";\"Müşteri/Garson Notu\"\n")
+            writer.write("\"Sıra No\";\"Satış Tarihi\";\"Satış Saati\";\"Masa\";\"Müşteri Adı\";\"Sipariş Edilen Ürünler\";\"Toplam Ürün Adedi\";\"Ödeme Yöntemi\";\"İndirim/İkram (TL)\";\"Net Tahsilat (TL)\";\"Ödeme Durumu\";\"Müşteri/Garson Notu\"\n")
 
-            var totalRevenue = 0.0
+            var totalNetRevenue = 0.0
             var totalItemCount = 0
+            var totalCard = 0.0
+            var totalCash = 0.0
+            var totalTransfer = 0.0
+            var totalComplimentaryOrDiscount = 0.0
 
             completedOrders.forEachIndexed { index, order ->
                 val dateStr = order.createdAt?.let { sdfDate.format(it) } ?: "--"
@@ -77,22 +83,55 @@ object ExcelReportGenerator {
                 val customerStr = order.customerName.ifBlank { "Misafir" }
 
                 // Products summary (e.g. 2x Espresso, 1x San Sebastian)
-                val productsDetail = order.items.joinToString(" + ") { "${it.quantity}x ${it.name} (₺${"%.2f".format(it.unitPrice)})" }
+                val productsDetail = order.items.joinToString(" + ") {
+                    val compTag = if (it.isComplimentary) " (İKRAM)" else if (it.discountAmount > 0) " (-₺${"%.2f".format(it.discountAmount)})" else ""
+                    "${it.quantity}x ${it.name}$compTag (₺${"%.2f".format(it.effectivePrice())})"
+                }
                 val orderItemsCount = order.items.sumOf { it.quantity }
-                val orderRevenue = if (order.items.any { it.isPaid }) order.items.filter { it.isPaid }.sumOf { it.unitPrice * it.quantity } else order.totalPrice
+                val orderNetRevenue = order.paidAmount().let { if (it > 0) it else order.totalPrice }
+                val orderDiscount = order.items.sumOf { it.discountAmount } + order.complimentaryAmount()
+
+                val methodsUsed = order.items.mapNotNull {
+                    when (it.paymentMethod) {
+                        "card" -> "Kredi Kartı"
+                        "cash" -> "Nakit"
+                        "transfer" -> "Havale"
+                        "complimentary" -> "İkram"
+                        else -> null
+                    }
+                }.distinct().joinToString(", ").ifBlank {
+                    when (order.paymentMethod) {
+                        "card" -> "Kredi Kartı"
+                        "cash" -> "Nakit"
+                        "transfer" -> "Havale"
+                        "complimentary" -> "İkram"
+                        else -> "Kredi Kartı"
+                    }
+                }
+
                 val paymentStatus = if (order.isFullyPaid() || order.status == "delivered") "Tahsil Edildi (Ödendi)" else "Açık / Bekliyor"
                 val noteStr = order.note.ifBlank { "-" }.replace("\"", "'")
 
-                totalRevenue += orderRevenue
+                totalNetRevenue += orderNetRevenue
                 totalItemCount += orderItemsCount
+                totalCard += order.cardPaidAmount()
+                totalCash += order.cashPaidAmount()
+                totalTransfer += order.transferPaidAmount()
+                totalComplimentaryOrDiscount += orderDiscount
 
                 // Clean CSV Row (semicolon separated for European/Turkish Excel standard)
-                writer.write("${index + 1};\"$dateStr\";\"$timeStr\";\"$tableStr\";\"$customerStr\";\"$productsDetail\";$orderItemsCount;${"%.2f".format(orderRevenue).replace(".", ",")};\"$paymentStatus\";\"$noteStr\"\n")
+                writer.write("${index + 1};\"$dateStr\";\"$timeStr\";\"$tableStr\";\"$customerStr\";\"$productsDetail\";$orderItemsCount;\"$methodsUsed\";${"%.2f".format(orderDiscount).replace(".", ",")};${"%.2f".format(orderNetRevenue).replace(".", ",")};\"$paymentStatus\";\"$noteStr\"\n")
             }
 
             // Summary Section at bottom
-            writer.write("\n\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\"\n")
-            writer.write("\"GENEL TOPLAM\";\"\";\"\";\"\";\"\";\"Toplam Satılan Ürün:\";$totalItemCount;\"TOPLAM CİRO (TL):\";\"₺${"%.2f".format(totalRevenue).replace(".", ",")}\";\"\"\n")
+            writer.write("\n\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\";\"---\"\n")
+            writer.write("\"ÖZET TAHSİLAT TABLOSU\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Kredi Kartı Tahsilat:\";\"₺${"%.2f".format(totalCard).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Nakit Tahsilat:\";\"₺${"%.2f".format(totalCash).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"Havale/EFT/FAST Tahsilat:\";\"₺${"%.2f".format(totalTransfer).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"İkram / İndirim Toplamı:\";\"₺${"%.2f".format(totalComplimentaryOrDiscount).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"GENEL TOPLAM SATILAN ÜRÜN:\";\"$totalItemCount Adet\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
+            writer.write("\"GENEL NET CİRO:\";\"₺${"%.2f".format(totalNetRevenue).replace(".", ",")}\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\"\n")
 
             writer.flush()
             writer.close()

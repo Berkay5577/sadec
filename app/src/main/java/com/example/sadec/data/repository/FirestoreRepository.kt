@@ -128,11 +128,12 @@ class FirestoreRepository {
         }
     }
 
-    suspend fun updateOrderItemPayment(
+    suspend fun payOrderItem(
         restaurantId: String,
         orderId: String,
         itemIndex: Int,
-        isPaid: Boolean
+        isPaid: Boolean,
+        paymentMethod: String = "card"
     ): Result<Unit> {
         return try {
             val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
@@ -144,6 +145,7 @@ class FirestoreRepository {
                     val targetItem = updatedItems[itemIndex]
                     updatedItems[itemIndex] = targetItem.copy(
                         isPaid = isPaid,
+                        paymentMethod = if (isPaid) paymentMethod else "",
                         paidAt = if (isPaid) System.currentTimeMillis() else null
                     )
                     val isAllPaid = updatedItems.isNotEmpty() && updatedItems.all { it.isPaid }
@@ -164,23 +166,123 @@ class FirestoreRepository {
         }
     }
 
-    suspend fun payFullOrder(restaurantId: String, orderId: String): Result<Unit> {
+    suspend fun payFullOrder(restaurantId: String, orderId: String, paymentMethod: String = "card"): Result<Unit> {
         return try {
             val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(docRef)
                 val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
                 val updatedItems = order.items.map {
-                    it.copy(isPaid = true, paidAt = it.paidAt ?: System.currentTimeMillis())
+                    it.copy(
+                        isPaid = true,
+                        paymentMethod = if (it.paymentMethod.isBlank()) paymentMethod else it.paymentMethod,
+                        paidAt = it.paidAt ?: System.currentTimeMillis()
+                    )
                 }
                 transaction.update(
                     docRef,
                     mapOf(
                         "items" to updatedItems,
+                        "paymentMethod" to paymentMethod,
                         "status" to "delivered",
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
                 )
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun transferEntireTable(
+        restaurantId: String,
+        fromTableId: String,
+        toTableId: String,
+        toTableLabel: String
+    ): Result<Unit> {
+        return try {
+            val ordersQuery = db.collection("restaurants")
+                .document(restaurantId)
+                .collection("orders")
+                .whereEqualTo("tableId", fromTableId)
+                .whereEqualTo("isArchived", false)
+                .get()
+                .await()
+
+            val batch = db.batch()
+            for (doc in ordersQuery.documents) {
+                val order = doc.toObject(Order::class.java)
+                if (order != null && !order.isFullyPaid()) {
+                    batch.update(
+                        doc.reference,
+                        mapOf(
+                            "tableId" to toTableId,
+                            "tableLabel" to toTableLabel,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun transferSingleOrder(
+        restaurantId: String,
+        orderId: String,
+        toTableId: String,
+        toTableLabel: String
+    ): Result<Unit> {
+        return try {
+            db.collection("restaurants")
+                .document(restaurantId)
+                .collection("orders")
+                .document(orderId)
+                .update(
+                    mapOf(
+                        "tableId" to toTableId,
+                        "tableLabel" to toTableLabel,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun setItemDiscountOrComplimentary(
+        restaurantId: String,
+        orderId: String,
+        itemIndex: Int,
+        isComplimentary: Boolean,
+        discountAmount: Double
+    ): Result<Unit> {
+        return try {
+            val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
+                val updatedItems = order.items.toMutableList()
+                if (itemIndex in updatedItems.indices) {
+                    val targetItem = updatedItems[itemIndex]
+                    updatedItems[itemIndex] = targetItem.copy(
+                        isComplimentary = isComplimentary,
+                        discountAmount = if (isComplimentary) 0.0 else discountAmount
+                    )
+                    transaction.update(
+                        docRef,
+                        mapOf(
+                            "items" to updatedItems,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
             }.await()
             Result.success(Unit)
         } catch (e: Exception) {

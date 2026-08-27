@@ -73,6 +73,10 @@ data class Order(
     val totalPrice: Double = 0.0,
     val note: String = "",
     val cancelReason: String = "", // İptal gerekçesi
+    val paymentMethod: String = "", // cash, card, transfer, complimentary, mix
+    val discountAmount: Double = 0.0,
+    @get:PropertyName("isComplimentary") @set:PropertyName("isComplimentary")
+    var isComplimentary: Boolean = false,
     @get:PropertyName("isArchived") @set:PropertyName("isArchived")
     var isArchived: Boolean = false, // Haftalık sıfırlama/arşivleme için
     val weekPeriod: String = "",     // Örn: "2026-W35"
@@ -80,8 +84,12 @@ data class Order(
     @ServerTimestamp val updatedAt: Date? = null
 ) {
     fun isFullyPaid(): Boolean = items.isNotEmpty() && items.all { it.isPaid }
-    fun remainingAmount(): Double = items.filter { !it.isPaid }.sumOf { it.unitPrice * it.quantity }
-    fun paidAmount(): Double = items.filter { it.isPaid }.sumOf { it.unitPrice * it.quantity }
+    fun remainingAmount(): Double = items.filter { !it.isPaid }.sumOf { it.effectivePrice() }
+    fun paidAmount(): Double = items.filter { it.isPaid }.sumOf { it.effectivePrice() }
+    fun cashPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "cash" || (it.paymentMethod.isEmpty() && paymentMethod == "cash")) }.sumOf { it.effectivePrice() }
+    fun cardPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "card" || (it.paymentMethod.isEmpty() && (paymentMethod == "card" || paymentMethod.isEmpty()))) }.sumOf { it.effectivePrice() }
+    fun transferPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "transfer" || (it.paymentMethod.isEmpty() && paymentMethod == "transfer")) }.sumOf { it.effectivePrice() }
+    fun complimentaryAmount(): Double = items.filter { it.isComplimentary }.sumOf { it.unitPrice * it.quantity } + if (isComplimentary) totalPrice else 0.0
 }
 
 data class OrderItem(
@@ -90,10 +98,16 @@ data class OrderItem(
     val quantity: Int = 1,
     val unitPrice: Double = 0.0,
     val note: String = "",
+    val paymentMethod: String = "", // cash, card, transfer, complimentary
+    val discountAmount: Double = 0.0,
+    @get:PropertyName("isComplimentary") @set:PropertyName("isComplimentary")
+    var isComplimentary: Boolean = false,
     @get:PropertyName("isPaid") @set:PropertyName("isPaid")
     var isPaid: Boolean = false,
     val paidAt: Long? = null
-)
+) {
+    fun effectivePrice(): Double = if (isComplimentary) 0.0 else maxOf(0.0, (unitPrice * quantity) - discountAmount)
+}
 
 data class Staff(
     @DocumentId val id: String = "",

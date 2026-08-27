@@ -223,24 +223,89 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    fun payOrderItem(orderId: String, itemIndex: Int) {
+    fun payOrderItem(orderId: String, itemIndex: Int, paymentMethod: String = "card") {
+        val methodLabel = when (paymentMethod) {
+            "cash" -> "Nakit 💵"
+            "card" -> "Kredi Kartı 💳"
+            "transfer" -> "Havale/EFT 📲"
+            "complimentary" -> "İkram 🎁"
+            else -> "Ödeme 💳"
+        }
         viewModelScope.launch {
-            val res = firestoreRepository.updateOrderItemPayment(_restaurantId.value, orderId, itemIndex, true)
+            val res = firestoreRepository.payOrderItem(_restaurantId.value, orderId, itemIndex, true, paymentMethod)
             res.onSuccess {
-                _uiMessage.emit("Ürün ödemesi alındı! 💳✅")
+                _uiMessage.emit("Ürün ödemesi ($methodLabel) alındı! ✅")
             }.onFailure {
                 _uiMessage.emit("Ödeme işlenemedi: ${it.localizedMessage}")
             }
         }
     }
 
-    fun payFullOrder(orderId: String) {
+    fun payFullOrder(orderId: String, paymentMethod: String = "card") {
+        val methodLabel = when (paymentMethod) {
+            "cash" -> "Nakit 💵"
+            "card" -> "Kredi Kartı 💳"
+            "transfer" -> "Havale/EFT 📲"
+            "complimentary" -> "İkram 🎁"
+            else -> "Ödeme 💳"
+        }
         viewModelScope.launch {
-            val res = firestoreRepository.payFullOrder(_restaurantId.value, orderId)
+            val res = firestoreRepository.payFullOrder(_restaurantId.value, orderId, paymentMethod)
             res.onSuccess {
-                _uiMessage.emit("Masa hesabı tamamen kapatıldı ve tahsil edildi! 💳✨")
+                _uiMessage.emit("Hesap ($methodLabel) tahsil edildi ve kapatıldı! ✨")
             }.onFailure {
                 _uiMessage.emit("Hesap kapatılamadı: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun payEntireTable(tableId: String, paymentMethod: String = "card") {
+        viewModelScope.launch {
+            val tableOrders = _orders.value.filter { it.tableId == tableId && !it.isArchived && !it.isFullyPaid() }
+            for (order in tableOrders) {
+                firestoreRepository.payFullOrder(_restaurantId.value, order.id, paymentMethod)
+            }
+            _uiMessage.emit("Tüm masa ödemesi başarıyla alındı! 💳✅")
+        }
+    }
+
+    fun transferEntireTable(fromTableId: String, toTableId: String, toTableLabel: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = firestoreRepository.transferEntireTable(_restaurantId.value, fromTableId, toTableId, toTableLabel)
+            res.onSuccess {
+                _uiMessage.emit("Masa siparişleri $toTableLabel masasına aktarıldı! 🔄✅")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Masa taşınamadı: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun transferSingleOrder(orderId: String, toTableId: String, toTableLabel: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val res = firestoreRepository.transferSingleOrder(_restaurantId.value, orderId, toTableId, toTableLabel)
+            res.onSuccess {
+                _uiMessage.emit("Kişi siparişi $toTableLabel masasına aktarıldı! 🔄✅")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("Aktarım yapılamadı: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun setItemDiscountOrComplimentary(orderId: String, itemIndex: Int, isComplimentary: Boolean, discountAmount: Double = 0.0) {
+        viewModelScope.launch {
+            val res = firestoreRepository.setItemDiscountOrComplimentary(_restaurantId.value, orderId, itemIndex, isComplimentary, discountAmount)
+            res.onSuccess {
+                if (isComplimentary) {
+                    _uiMessage.emit("Ürün İkram 🎁 olarak işaretlendi!")
+                } else if (discountAmount > 0) {
+                    _uiMessage.emit("₺${"%.2f".format(discountAmount)} indirim uygulandı! 🏷️")
+                } else {
+                    _uiMessage.emit("İndirim/İkram kaldırıldı.")
+                }
+            }.onFailure {
+                _uiMessage.emit("İşlem uygulanamadı: ${it.localizedMessage}")
             }
         }
     }
