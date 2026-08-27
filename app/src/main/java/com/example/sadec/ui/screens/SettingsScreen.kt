@@ -34,7 +34,6 @@ import com.example.sadec.R
 import com.example.sadec.data.model.PopupCampaign
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
-import com.example.sadec.util.SoundPlayer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,7 +75,7 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 windowInsets = TopAppBarDefaults.windowInsets,
-                title = { Text("Ayarlar & Restoran Bilgisi", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = { Text("Yönetim & Ayarlar", fontWeight = FontWeight.Bold, color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = ForestGreen,
                     titleContentColor = Color.White
@@ -92,23 +91,76 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 📄 TOPLU QR KODLARI PDF ÇIKARTMA KARTI
+            // 1. RESTAURANT PROFILE & STATUS HEADER
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.15f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(ForestGreen)
+                            .padding(3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.sadec_logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = restaurant?.name ?: "Sade.C Kahve Gerze",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreen
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Kahvenin en saf hali • Gerze / Sinop",
+                            fontSize = 12.sp,
+                            color = SageGreen
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Surface(
+                            color = SoftMintGreen,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "Şube: $restaurantId • Çevrimiçi 🟢",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ForestGreen,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 2. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        com.example.sadec.util.QrPdfGenerator.generateAndSharePdf(
-                            context = context,
-                            tables = tables,
-                            restaurantId = restaurantId,
-                            baseUrl = baseUrl,
-                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
-                        )
-                    },
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
-                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.3f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                    .clickable { onNavigateToDashboard() },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = ForestGreen),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.5f))
             ) {
                 Row(
                     modifier = Modifier
@@ -118,23 +170,20 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text("📄", fontSize = 22.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📊", fontSize = 20.sp)
                             Text(
-                                text = "Masa QR Standlarını PDF Çıkart",
+                                text = "Satış Dashboard & Raporlar",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = ForestGreen
+                                color = WarmGold
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Üstte QR kod, altta masa numarası olacak şekilde tüm masaları A4 baskıya hazır PDF olarak indirir/paylaşır.",
+                            text = "Haftalık ciro, adet bazlı ürün satışları, manuel kasa satışı ve sipariş geçmişi analizi.",
                             fontSize = 12.sp,
-                            color = SageGreen,
+                            color = Color.White.copy(alpha = 0.9f),
                             lineHeight = 16.sp
                         )
                     }
@@ -142,26 +191,26 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Surface(
-                        color = ForestGreen,
+                        color = WarmGold,
                         shape = CircleShape,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "PDF Çıkart",
-                                tint = WarmGold,
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Aç",
+                                tint = ForestGreen,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
                 }
             }
 
-            // 🌟 QR MENÜ KAMPANYA POP-UP (DENEDİNİZ Mİ?) AYARLARI KARTI
+            // 3. 🌟 QR MENÜ KAMPANYA POP-UP (DENEDİNİZ Mİ?) AYARLARI KARTI
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
                 border = BorderStroke(1.5.dp, if (isPopupActive) WarmGold else ForestGreen.copy(alpha = 0.2f))
@@ -176,7 +225,7 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(38.dp)
                                     .background(if (isPopupActive) WarmGold else Slate100, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -213,7 +262,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Müşteriler masadaki QR menüyü okutup açtığında karşılarına çıkacak özel tanıtım kartını özelleştirin.",
+                        text = "Müşteriler masadaki QR menüyü açtığında karşılarına çıkacak özel kampanya kartını özelleştirin.",
                         fontSize = 12.sp,
                         color = Slate500,
                         lineHeight = 16.sp
@@ -433,57 +482,23 @@ fun SettingsScreen(
                 }
             }
 
-            // Restaurant Info Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(ForestGreen)
-                                .padding(2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.sadec_logo),
-                                contentDescription = "Logo",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column {
-                            Text(
-                                text = restaurant?.name ?: "Sade.C Kahve Gerze",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = ForestGreen
-                            )
-                            Text(
-                                text = "Şube Kodu: $restaurantId",
-                                fontSize = 12.sp,
-                                color = Slate500
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 📊 SATIŞ DASHBOARD & RAPORLARI BANNER
+            // 4. 📄 TOPLU MASA STANDLARI PDF ÇIKARTMA KARTI
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onNavigateToDashboard() },
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = ForestGreen),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    .clickable {
+                        com.example.sadec.util.QrPdfGenerator.generateAndSharePdf(
+                            context = context,
+                            tables = tables,
+                            restaurantId = restaurantId,
+                            baseUrl = baseUrl,
+                            restaurantName = restaurant?.name ?: "Sade.C Kahve Gerze"
+                        )
+                    },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SoftMintGreen),
+                border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.25f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -493,17 +508,23 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "📊 Satış Dashboard & Raporları",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = WarmGold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("📄", fontSize = 20.sp)
+                            Text(
+                                text = "Masa QR Standlarını PDF Çıkart",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = ForestGreen
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Adet bazlı ürün satışları (Espresso x14 vb.), ciro analizi, elle kasa satışı ve sipariş geçmişi.",
+                            text = "Tüm masaları A4 baskıya hazır QR masa standı olarak tek tıkla PDF indirir veya paylaşır.",
                             fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.88f),
+                            color = SageGreen,
                             lineHeight = 16.sp
                         )
                     }
@@ -511,15 +532,15 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Surface(
-                        color = WarmGold,
+                        color = ForestGreen,
                         shape = CircleShape,
                         modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Aç",
-                                tint = ForestGreen,
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "PDF Çıkart",
+                                tint = WarmGold,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -527,39 +548,9 @@ fun SettingsScreen(
                 }
             }
 
-            // Quick Tools & Testing
-            Text("Test & Ses Araçları", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ForestGreen)
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Test Sound
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Sipariş Zil Sesi Testi", fontWeight = FontWeight.Bold)
-                        Text("Yeni sipariş geldiğinde çalacak ses ve titreşimi test edin.", fontSize = 12.sp, color = Slate500)
-                    }
-                    Button(
-                        onClick = { SoundPlayer.playOrderAlert(context) },
-                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold)
-                    ) {
-                        Text("Çal 🔔", color = ForestGreen, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Sign Out
+            // 5. GÜVENLİ ÇIKIŞ (SIGN OUT)
             OutlinedButton(
                 onClick = {
                     viewModel.signOut()
@@ -569,14 +560,15 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .height(50.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f))
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Oturumu Kapat", fontWeight = FontWeight.Bold)
             }
 
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
