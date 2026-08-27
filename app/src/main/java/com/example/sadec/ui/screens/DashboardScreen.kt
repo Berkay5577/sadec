@@ -1449,10 +1449,19 @@ fun ManualCashEntryTab(
     onSaveManualOrder: (Order) -> Unit
 ) {
     var customerNameInput by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
     var selectedTableId by remember { mutableStateOf("table-kasa") }
     var selectedTableLabel by remember { mutableStateOf("KASA") }
     var selectedPaymentMethod by remember { mutableStateOf("cash") }
     val cart = remember { mutableStateListOf<OrderItem>() }
+
+    val filteredMenuItems = remember(menuItems, searchQuery) {
+        if (searchQuery.isBlank()) menuItems
+        else menuItems.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.description.contains(searchQuery, ignoreCase = true)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1528,10 +1537,59 @@ fun ManualCashEntryTab(
         }
 
         item {
-            Text("MENÜDEN ÜRÜN SEÇİN", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = ForestGreen)
+            Column {
+                Text(
+                    text = "MENÜDEN ÜRÜN SEÇİN",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = ForestGreen
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Ürün veya kahve ara...", fontSize = 13.sp, color = Slate500) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = ForestGreen) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Temizle", tint = Slate500)
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ForestGreen,
+                        unfocusedBorderColor = ForestGreen.copy(alpha = 0.2f),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
-        items(menuItems) { item ->
+        if (filteredMenuItems.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "'$searchQuery' ile eşleşen ürün bulunamadı." else "Menüde ürün bulunmuyor.",
+                            color = Slate500,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        items(filteredMenuItems) { item ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
