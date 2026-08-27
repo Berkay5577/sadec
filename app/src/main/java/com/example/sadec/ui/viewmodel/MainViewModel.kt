@@ -511,6 +511,21 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun setPopupCampaignActive(isActive: Boolean) {
+        viewModelScope.launch {
+            val res = firestoreRepository.setPopupCampaignActive(_restaurantId.value, isActive)
+            res.onSuccess {
+                if (isActive) {
+                    _uiMessage.emit("Pop-up kampanyası aktif edildi 🟢 (QR Menüde gösteriliyor)")
+                } else {
+                    _uiMessage.emit("Pop-up kampanyası kapatıldı ⚪ (Pasif yapıldı)")
+                }
+            }.onFailure {
+                _uiMessage.emit("Durum kaydedilemedi: ${it.localizedMessage}")
+            }
+        }
+    }
+
     fun savePopupCampaign(
         campaign: PopupCampaign,
         imageUri: Uri? = null,
@@ -531,7 +546,11 @@ class MainViewModel @JvmOverloads constructor(
 
             val res = firestoreRepository.savePopupCampaign(_restaurantId.value, finalCampaign)
             res.onSuccess {
-                _uiMessage.emit("Pop-up kampanyası güncellendi ve yayına alındı! 🌟✨")
+                if (finalCampaign.isActive) {
+                    _uiMessage.emit("Pop-up kampanyası kaydedildi ve yayına alındı! 🌟🟢")
+                } else {
+                    _uiMessage.emit("Pop-up ayarları kaydedildi (Kampanya pasif) ⚪")
+                }
                 onComplete()
             }.onFailure {
                 _uiMessage.emit("Kampanya kaydedilemedi: ${it.localizedMessage}")

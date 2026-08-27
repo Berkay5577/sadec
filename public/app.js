@@ -289,7 +289,8 @@ function listenRestaurantData() {
       }
 
       // Check Promo / Campaign Pop-up
-      if (data.popupCampaign && data.popupCampaign.isActive) {
+      const isPromoActive = data.popupCampaign && (data.popupCampaign.isActive === true || data.popupCampaign.active === true);
+      if (isPromoActive) {
         activePromoCampaign = data.popupCampaign;
         checkAndShowPromoModal(data.popupCampaign);
       } else {

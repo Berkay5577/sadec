@@ -56,15 +56,31 @@ fun SettingsScreen(
 
     // --- POP-UP CAMPAIGN STATE ---
     val existingCampaign = restaurant?.popupCampaign
-    var isPopupActive by remember(existingCampaign) { mutableStateOf(existingCampaign?.isActive ?: false) }
-    var popupBadge by remember(existingCampaign) { mutableStateOf(existingCampaign?.badge ?: "DENEDİNİZ Mİ? 🌟") }
-    var popupTitle by remember(existingCampaign) { mutableStateOf(existingCampaign?.title ?: "") }
-    var popupDesc by remember(existingCampaign) { mutableStateOf(existingCampaign?.description ?: "") }
-    var popupPrice by remember(existingCampaign) { mutableStateOf(existingCampaign?.priceText ?: "") }
-    var popupButtonText by remember(existingCampaign) { mutableStateOf(existingCampaign?.buttonText ?: "Hemen Keşfet ✨") }
-    var selectedTargetItemId by remember(existingCampaign) { mutableStateOf(existingCampaign?.targetMenuItemId ?: "") }
+    var isPopupActive by remember { mutableStateOf(existingCampaign?.isActive ?: false) }
+    var popupBadge by remember { mutableStateOf(existingCampaign?.badge ?: "DENEDİNİZ Mİ? 🌟") }
+    var popupTitle by remember { mutableStateOf(existingCampaign?.title ?: "") }
+    var popupDesc by remember { mutableStateOf(existingCampaign?.description ?: "") }
+    var popupPrice by remember { mutableStateOf(existingCampaign?.priceText ?: "") }
+    var popupButtonText by remember { mutableStateOf(existingCampaign?.buttonText ?: "Hemen Keşfet ✨") }
+    var selectedTargetItemId by remember { mutableStateOf(existingCampaign?.targetMenuItemId ?: "") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var isTargetMenuDropdownExpanded by remember { mutableStateOf(false) }
+
+    var isInitializedFromDb by remember { mutableStateOf(false) }
+    LaunchedEffect(existingCampaign) {
+        if (existingCampaign != null) {
+            isPopupActive = existingCampaign.isActive
+            if (!isInitializedFromDb) {
+                popupBadge = existingCampaign.badge.ifBlank { "DENEDİNİZ Mİ? 🌟" }
+                popupTitle = existingCampaign.title
+                popupDesc = existingCampaign.description
+                popupPrice = existingCampaign.priceText
+                popupButtonText = existingCampaign.buttonText.ifBlank { "Hemen Keşfet ✨" }
+                selectedTargetItemId = existingCampaign.targetMenuItemId
+                isInitializedFromDb = true
+            }
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -385,7 +401,10 @@ fun SettingsScreen(
 
                         Switch(
                             checked = isPopupActive,
-                            onCheckedChange = { isPopupActive = it },
+                            onCheckedChange = {
+                                isPopupActive = it
+                                viewModel.setPopupCampaignActive(it)
+                            },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = ForestGreen,
                                 checkedTrackColor = WarmGold,

@@ -34,17 +34,30 @@ data class AppUpdateInfo(
 )
 
 data class PopupCampaign(
-    @get:PropertyName("isActive") @set:PropertyName("isActive")
+    @get:PropertyName("isActive") @set:PropertyName("isActive") @field:PropertyName("isActive")
     var isActive: Boolean = false,
     val badge: String = "DENEDİNİZ Mİ? 🌟",
     val title: String = "",
     val description: String = "",
     val imageUrl: String = "",
     val priceText: String = "",
-    val buttonText: String = "Hemen İncele ✨",
+    val buttonText: String = "Hemen Keşfet ✨",
     val targetMenuItemId: String = "",
     val updatedAt: Long = System.currentTimeMillis()
-)
+) {
+    fun toMap(): Map<String, Any> = mapOf(
+        "isActive" to isActive,
+        "active" to isActive,
+        "badge" to badge,
+        "title" to title,
+        "description" to description,
+        "imageUrl" to imageUrl,
+        "priceText" to priceText,
+        "buttonText" to buttonText,
+        "targetMenuItemId" to targetMenuItemId,
+        "updatedAt" to updatedAt
+    )
+}
 
 data class Category(
     @DocumentId val id: String = "",

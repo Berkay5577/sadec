@@ -541,13 +541,49 @@ class FirestoreRepository {
 
     suspend fun savePopupCampaign(restaurantId: String, campaign: PopupCampaign): Result<Unit> {
         return try {
+            val map = campaign.toMap()
             db.collection("restaurants")
                 .document(restaurantId)
-                .set(mapOf("popupCampaign" to campaign), com.google.firebase.firestore.SetOptions.merge())
+                .set(mapOf("popupCampaign" to map), com.google.firebase.firestore.SetOptions.merge())
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    suspend fun setPopupCampaignActive(restaurantId: String, isActive: Boolean): Result<Unit> {
+        return try {
+            db.collection("restaurants")
+                .document(restaurantId)
+                .update(
+                    mapOf(
+                        "popupCampaign.isActive" to isActive,
+                        "popupCampaign.active" to isActive,
+                        "popupCampaign.updatedAt" to System.currentTimeMillis()
+                    )
+                )
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            try {
+                db.collection("restaurants")
+                    .document(restaurantId)
+                    .set(
+                        mapOf(
+                            "popupCampaign" to mapOf(
+                                "isActive" to isActive,
+                                "active" to isActive,
+                                "updatedAt" to System.currentTimeMillis()
+                            )
+                        ),
+                        com.google.firebase.firestore.SetOptions.merge()
+                    )
+                    .await()
+                Result.success(Unit)
+            } catch (e2: Exception) {
+                Result.failure(e2)
+            }
         }
     }
 
