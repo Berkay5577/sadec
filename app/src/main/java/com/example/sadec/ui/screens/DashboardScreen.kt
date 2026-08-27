@@ -297,7 +297,7 @@ fun DashboardScreen(
                             listOf(
                                 Pair("☀️ Bugün", 0),
                                 Pair("📅 Bu Hafta", 1),
-                                Pair("🗄️ Tüm Geçmiş", 2)
+                                Pair("🗄️ Geçmiş", 2)
                             ).forEach { (title, idx) ->
                                 val isSelected = dateFilterIndex == idx
                                 Surface(
@@ -308,14 +308,15 @@ fun DashboardScreen(
                                         .clickable { dateFilterIndex = idx }
                                 ) {
                                     Box(
-                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = title,
-                                            fontSize = 12.5.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) WarmGold else Slate500
+                                            color = if (isSelected) WarmGold else Slate500,
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -330,7 +331,7 @@ fun DashboardScreen(
                         selectedTabIndex = selectedTab,
                         containerColor = Color.Transparent,
                         contentColor = ForestGreen,
-                        edgePadding = 0.dp,
+                        edgePadding = 16.dp,
                         divider = {}
                     ) {
                         tabs.forEachIndexed { index, (title, icon) ->
