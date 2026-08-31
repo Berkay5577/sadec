@@ -6,19 +6,25 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.data.model.OrderItem
 import com.example.sadec.data.model.TableItem
@@ -34,6 +40,7 @@ fun ActiveTablesScreen(
 ) {
     val tables by viewModel.tables.collectAsState()
     val orders by viewModel.orders.collectAsState()
+    val menuItems by viewModel.menuItems.collectAsState()
 
     // Active unarchived orders with unpaid items (even if delivered, orders stay in Masalar until fully paid!)
     val activeOrders = remember(orders) {
@@ -55,6 +62,8 @@ fun ActiveTablesScreen(
     var paymentTarget by remember { mutableStateOf<PaymentTarget?>(null) }
     // State for Discount / Complimentary Modal
     var discountTarget by remember { mutableStateOf<DiscountTarget?>(null) }
+    // State for Item Edit Modal (ürün ve fiyat düzenleme)
+    var itemToEdit by remember { mutableStateOf<ItemEditTarget?>(null) }
 
     Scaffold(
         topBar = {
@@ -173,6 +182,9 @@ fun ActiveTablesScreen(
                         },
                         onDiscountClick = { orderId, itemIdx, item ->
                             discountTarget = DiscountTarget(orderId, itemIdx, item.name, item.unitPrice * item.quantity, item.isComplimentary, item.discountAmount)
+                        },
+                        onEditItemClick = { orderId, itemIdx, item ->
+                            itemToEdit = ItemEditTarget(orderId, itemIdx, item)
                         }
                     )
                 }
@@ -231,6 +243,23 @@ fun ActiveTablesScreen(
             }
         )
     }
+
+    // ✏️ ÜRÜN & FİYAT DÜZENLEME DİYALOĞU
+    itemToEdit?.let { target ->
+        EditOrderItemDialog(
+            item = target.item,
+            menuItems = menuItems,
+            onDismiss = { itemToEdit = null },
+            onSave = { updatedItem ->
+                viewModel.updateOrderItem(target.orderId, target.itemIndex, updatedItem)
+                itemToEdit = null
+            },
+            onDelete = {
+                viewModel.removeOrderItem(target.orderId, target.itemIndex)
+                itemToEdit = null
+            }
+        )
+    }
 }
 
 // Sealed class for payment targets
@@ -248,6 +277,12 @@ data class DiscountTarget(
     val currentDiscount: Double
 )
 
+data class ItemEditTarget(
+    val orderId: String,
+    val itemIndex: Int,
+    val item: OrderItem
+)
+
 @Composable
 fun ActiveTableOrderCard(
     table: TableItem,
@@ -256,7 +291,8 @@ fun ActiveTableOrderCard(
     onOpenTransfer: () -> Unit,
     onPayItemClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit,
     onPayFullTableClick: () -> Unit,
-    onDiscountClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit
+    onDiscountClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit,
+    onEditItemClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit
 ) {
     val sdfTime = SimpleDateFormat("HH:mm", Locale("tr"))
 
@@ -368,7 +404,20 @@ fun ActiveTableOrderCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .then(
+                                    if (!item.isPaid) {
+                                        Modifier
+                                            .clickable { onEditItemClick(order.id, itemIdx, item) }
+                                            .padding(vertical = 2.dp, horizontal = 2.dp)
+                                    } else {
+                                        Modifier.padding(vertical = 2.dp, horizontal = 2.dp)
+                                    }
+                                )
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "${item.quantity}x ${item.name}",
@@ -376,6 +425,15 @@ fun ActiveTableOrderCard(
                                     fontSize = 13.sp,
                                     color = if (item.isPaid) Slate500 else ForestGreen
                                 )
+                                if (!item.isPaid) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Ürünü / Fiyatı Düzenle",
+                                        tint = ForestGreen.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
                                 if (item.isComplimentary) {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Surface(
@@ -825,6 +883,254 @@ fun DiscountOrComplimentaryDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("İptal", color = Slate500)
+            }
+        }
+    )
+}
+
+// ✏️ ÜRÜN & FİYAT DÜZENLEME DİYALOĞU
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditOrderItemDialog(
+    item: OrderItem,
+    menuItems: List<MenuItem>,
+    onDismiss: () -> Unit,
+    onSave: (updatedItem: OrderItem) -> Unit,
+    onDelete: () -> Unit
+) {
+    var selectedMenuItemId by remember { mutableStateOf(item.menuItemId) }
+    var itemName by remember { mutableStateOf(item.name) }
+    var unitPriceText by remember {
+        mutableStateOf(
+            if (item.unitPrice % 1.0 == 0.0) item.unitPrice.toInt().toString() else item.unitPrice.toString()
+        )
+    }
+    var quantity by remember { mutableStateOf(item.quantity) }
+    var note by remember { mutableStateOf(item.note) }
+    var isMenuDropdownExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredMenu = remember(menuItems, searchQuery) {
+        if (searchQuery.isBlank()) menuItems
+        else menuItems.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.description.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(SoftMintGreen, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("✏️", fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text("Ürünü Düzenle & Değiştir", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ForestGreen)
+                    Text("Ürünü değiştirebilir veya fiyatı güncelleyebilirsiniz.", fontSize = 11.5.sp, color = Slate500)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // 1. ÜRÜN SEÇİMİ / DEĞİŞTİRME (DROPDOWN + ARAMA)
+                Text("Ürün (Menüden Değiştirin):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+
+                ExposedDropdownMenuBox(
+                    expanded = isMenuDropdownExpanded,
+                    onExpandedChange = { isMenuDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = itemName,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isMenuDropdownExpanded) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ForestGreen,
+                            unfocusedBorderColor = ForestGreen.copy(alpha = 0.3f),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = isMenuDropdownExpanded,
+                        onDismissRequest = { isMenuDropdownExpanded = false }
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Ürün ara...", fontSize = 12.sp) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                        )
+                        HorizontalDivider()
+                        filteredMenu.forEach { mItem ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(mItem.name, fontWeight = FontWeight.Medium)
+                                        Text("₺${"%.2f".format(mItem.price)}", fontWeight = FontWeight.Bold, color = WarmGold)
+                                    }
+                                },
+                                onClick = {
+                                    selectedMenuItemId = mItem.id
+                                    itemName = mItem.name
+                                    // Ürün değiştiğinde FİYAT OTOMATİK OLARAK GÜNCELLENİR!
+                                    unitPriceText = if (mItem.price % 1.0 == 0.0) mItem.price.toInt().toString() else mItem.price.toString()
+                                    isMenuDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // 2. FİYAT DÜZENLEME (ÖZEL FİYAT / MANUEL FİYAT GİRİŞİ)
+                Text("Birim Fiyat (₺):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                OutlinedTextField(
+                    value = unitPriceText,
+                    onValueChange = { input ->
+                        val clean = input.replace(',', '.')
+                        if (clean.isEmpty() || clean.toDoubleOrNull() != null || clean.count { it == '.' } <= 1) {
+                            unitPriceText = clean
+                        }
+                    },
+                    label = { Text("Birim Fiyat") },
+                    prefix = { Text("₺ ", fontWeight = FontWeight.Bold, color = WarmGold) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ForestGreen,
+                        unfocusedBorderColor = ForestGreen.copy(alpha = 0.3f),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 3. ADET / MİKTAR
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Adet / Miktar:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { if (quantity > 1) quantity-- },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                        }
+                        Text(
+                            text = "$quantity",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = ForestGreen,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
+                        IconButton(
+                            onClick = { quantity++ },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                        ) {
+                            Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                        }
+                    }
+                }
+
+                // 4. SİPARİŞ NOTU
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Ürün Notu") },
+                    placeholder = { Text("Örn: Az şekerli, ekstra sıcak vb.") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ForestGreen,
+                        unfocusedBorderColor = ForestGreen.copy(alpha = 0.3f),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 5. YENİ TOPLAM TUTAR ÖZETİ
+                val parsedPrice = unitPriceText.toDoubleOrNull() ?: item.unitPrice
+                val subtotal = parsedPrice * quantity
+                Surface(
+                    color = SoftMintGreen,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Yeni Kalem Tutarı:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
+                        Text("₺${"%.2f".format(subtotal)}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalPrice = unitPriceText.toDoubleOrNull() ?: item.unitPrice
+                    val updated = item.copy(
+                        menuItemId = selectedMenuItemId,
+                        name = itemName.trim().ifBlank { item.name },
+                        unitPrice = finalPrice,
+                        quantity = quantity,
+                        note = note.trim()
+                    )
+                    onSave(updated)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Kaydet ✨", color = WarmGold, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = DangerRed)
+                ) {
+                    Text("🗑️ Sil", fontWeight = FontWeight.Bold)
+                }
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Slate500)
+                ) {
+                    Text("Vazgeç")
+                }
             }
         }
     )

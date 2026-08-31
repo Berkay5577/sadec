@@ -271,6 +271,80 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun updateOrderItem(
+        restaurantId: String,
+        orderId: String,
+        itemIndex: Int,
+        updatedItem: OrderItem
+    ): Result<Unit> {
+        return try {
+            val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
+                val updatedItems = order.items.toMutableList()
+                if (itemIndex in updatedItems.indices) {
+                    updatedItems[itemIndex] = updatedItem
+                    val newTotal = updatedItems.sumOf { it.unitPrice * it.quantity }
+                    transaction.update(
+                        docRef,
+                        mapOf(
+                            "items" to updatedItems,
+                            "totalPrice" to newTotal,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removeOrderItem(
+        restaurantId: String,
+        orderId: String,
+        itemIndex: Int
+    ): Result<Unit> {
+        return try {
+            val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
+                val updatedItems = order.items.toMutableList()
+                if (itemIndex in updatedItems.indices) {
+                    updatedItems.removeAt(itemIndex)
+                    if (updatedItems.isEmpty()) {
+                        transaction.update(
+                            docRef,
+                            mapOf(
+                                "items" to emptyList<OrderItem>(),
+                                "totalPrice" to 0.0,
+                                "status" to "cancelled",
+                                "cancelReason" to "Tüm ürünler çıkarıldı",
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    } else {
+                        val newTotal = updatedItems.sumOf { it.unitPrice * it.quantity }
+                        transaction.update(
+                            docRef,
+                            mapOf(
+                                "items" to updatedItems,
+                                "totalPrice" to newTotal,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    }
+                }
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun setItemDiscountOrComplimentary(
         restaurantId: String,
         orderId: String,

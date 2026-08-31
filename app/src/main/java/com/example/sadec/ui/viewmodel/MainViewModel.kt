@@ -350,6 +350,28 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun updateOrderItem(orderId: String, itemIndex: Int, updatedItem: OrderItem) {
+        viewModelScope.launch {
+            val res = firestoreRepository.updateOrderItem(_restaurantId.value, orderId, itemIndex, updatedItem)
+            res.onSuccess {
+                _uiMessage.emit("Ürün bilgileri ve fiyat güncellendi! ✨")
+            }.onFailure {
+                _uiMessage.emit("Güncelleme başarısız: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun removeOrderItem(orderId: String, itemIndex: Int) {
+        viewModelScope.launch {
+            val res = firestoreRepository.removeOrderItem(_restaurantId.value, orderId, itemIndex)
+            res.onSuccess {
+                _uiMessage.emit("Ürün siparişten kaldırıldı. 🗑️")
+            }.onFailure {
+                _uiMessage.emit("Kaldırılamadı: ${it.localizedMessage}")
+            }
+        }
+    }
+
     fun checkWeeklyPeriodStatus() {
         val cal = java.util.Calendar.getInstance()
         val currentYear = cal.get(java.util.Calendar.YEAR)
