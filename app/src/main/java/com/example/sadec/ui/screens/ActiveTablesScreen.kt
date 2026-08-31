@@ -29,6 +29,7 @@ import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.data.model.OrderItem
 import com.example.sadec.data.model.SelectedItemRef
+import com.example.sadec.data.model.SplitPaymentBreakdown
 import com.example.sadec.data.model.TableItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
@@ -221,21 +222,21 @@ fun ActiveTablesScreen(
         )
     }
 
-    // 💳 ÖDEME YÖNTEMİ SEÇME DİYALOĞU (Nakit, Kart, Havale, İkram)
+    // 💳 ÖDEME YÖNTEMİ SEÇME DİYALOĞU (Nakit, Kart, Havale, Parçalı, İkram)
     paymentTarget?.let { target ->
         PaymentMethodDialog(
             target = target,
             onDismiss = { paymentTarget = null },
-            onConfirmPayment = { method ->
+            onConfirmPayment = { method, breakdown ->
                 when (target) {
                     is PaymentTarget.Item -> {
-                        viewModel.payOrderItem(target.orderId, target.itemIndex, method)
+                        viewModel.payOrderItem(target.orderId, target.itemIndex, method, breakdown)
                     }
                     is PaymentTarget.FullTable -> {
-                        viewModel.payEntireTable(target.tableId, method)
+                        viewModel.payEntireTable(target.tableId, method, breakdown)
                     }
                     is PaymentTarget.SelectedItems -> {
-                        viewModel.paySelectedItems(target.selectedItems, method)
+                        viewModel.paySelectedItems(target.selectedItems, method, breakdown)
                     }
                 }
                 paymentTarget = null
@@ -837,14 +838,14 @@ fun TransferTableOrPersonDialog(
     )
 }
 
-// 💳 ÖDEME YÖNTEMİ DİYALOĞU (Nakit, Kredi Kartı, Havale, İkram)
+// 💳 ÖDEME YÖNTEMİ DİYALOĞU (Nakit, Kredi Kartı, Havale, Parçalı/Karma, İkram)
 @Composable
 fun PaymentMethodDialog(
     target: PaymentTarget,
     onDismiss: () -> Unit,
-    onConfirmPayment: (paymentMethod: String) -> Unit
+    onConfirmPayment: (paymentMethod: String, breakdown: SplitPaymentBreakdown?) -> Unit
 ) {
-    var selectedMethod by remember { mutableStateOf("card") } // "card", "cash", "transfer", "complimentary"
+    var selectedMethod by remember { mutableStateOf("card") } // "card", "cash", "transfer", "split", "complimentary"
 
     val title = when (target) {
         is PaymentTarget.Item -> "Ürün Ödemesi: ${target.itemName}"
@@ -858,6 +859,22 @@ fun PaymentMethodDialog(
         is PaymentTarget.SelectedItems -> target.amount
     }
 
+    var cashInput by remember { mutableStateOf("") }
+    var cardInput by remember { mutableStateOf("") }
+    var transferInput by remember { mutableStateOf("") }
+
+    val parsedCash = cashInput.replace(",", ".").toDoubleOrNull() ?: 0.0
+    val parsedCard = cardInput.replace(",", ".").toDoubleOrNull() ?: 0.0
+    val parsedTransfer = transferInput.replace(",", ".").toDoubleOrNull() ?: 0.0
+    val splitTotal = parsedCash + parsedCard + parsedTransfer
+    val diff = amount - splitTotal
+
+    val isSplitValid = if (selectedMethod == "split") {
+        splitTotal > 0.0 && diff <= 0.01
+    } else {
+        true
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -867,11 +884,15 @@ fun PaymentMethodDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Surface(
                     color = SoftMintGreen,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -883,34 +904,197 @@ fun PaymentMethodDialog(
                     }
                 }
 
-                // 4 Payment Options
+                // 5 Payment Options
                 val methods = listOf(
                     Triple("card", "Kredi Kartı / Banka Kartı", "💳"),
-                    Triple("cash", "Nakit Tahsilat", "💵"),
+                    Triple("cash", "Nakit Kasa", "💵"),
                     Triple("transfer", "Havale / EFT / FAST", "📲"),
+                    Triple("split", "Parçalı / Karma Ödeme (Nakit + Kart)", "🔀"),
                     Triple("complimentary", "İkram (Ücretsiz 0₺)", "🎁")
                 )
 
                 methods.forEach { (id, label, icon) ->
+                    val isSelected = selectedMethod == id
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable { selectedMethod = id },
+                            .padding(vertical = 3.5.dp)
+                            .clickable {
+                                selectedMethod = id
+                                if (id == "split" && cashInput.isBlank() && cardInput.isBlank() && transferInput.isBlank()) {
+                                    val half = (amount / 2.0)
+                                    val halfInt = half.toInt()
+                                    cashInput = if (half == halfInt.toDouble()) halfInt.toString() else "%.2f".format(half)
+                                    val remCard = amount - (cashInput.replace(",", ".").toDoubleOrNull() ?: 0.0)
+                                    cardInput = if (remCard == remCard.toInt().toDouble()) remCard.toInt().toString() else "%.2f".format(remCard)
+                                }
+                            },
                         shape = RoundedCornerShape(10.dp),
-                        color = if (selectedMethod == id) ForestGreen.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.5.dp, if (selectedMethod == id) ForestGreen else Slate100)
+                        color = if (isSelected) ForestGreen.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.5.dp, if (isSelected) ForestGreen else ForestGreen.copy(alpha = 0.15f))
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(11.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(icon, fontSize = 20.sp)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(label, fontWeight = if (selectedMethod == id) FontWeight.Bold else FontWeight.Normal, fontSize = 14.sp, color = ForestGreen)
+                            Text(icon, fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                label,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.5.sp,
+                                color = if (isSelected) ForestGreen else Color(0xFF1E293B)
+                            )
                             Spacer(modifier = Modifier.weight(1f))
-                            if (selectedMethod == id) {
+                            if (isSelected) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ForestGreen, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                // 🔀 PARÇALI ÖDEME GENİŞLETİLMİŞ ALANI
+                if (selectedMethod == "split") {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        color = Color(0xFFF8FAF9),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, ForestGreen.copy(alpha = 0.25f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🔀 Parçalı Tutar Girişi", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ForestGreen)
+
+                                TextButton(
+                                    onClick = {
+                                        val half = (amount / 2.0)
+                                        val halfInt = half.toInt()
+                                        cashInput = if (half == halfInt.toDouble()) halfInt.toString() else "%.2f".format(half)
+                                        val rem = maxOf(0.0, amount - (cashInput.replace(",", ".").toDoubleOrNull() ?: 0.0))
+                                        cardInput = if (rem == rem.toInt().toDouble()) rem.toInt().toString() else "%.2f".format(rem)
+                                        transferInput = ""
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("⚡ 50/50 Eşit Böl", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                }
+                            }
+
+                            // 💵 NAKİT GİRİŞİ
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("💵 Nakit Alınan:", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF166534))
+                                    TextButton(
+                                        onClick = {
+                                            val c = parsedCard
+                                            val t = parsedTransfer
+                                            val rem = maxOf(0.0, amount - c - t)
+                                            cashInput = if (rem == rem.toInt().toDouble()) rem.toInt().toString() else "%.2f".format(rem)
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                    ) {
+                                        Text("Kalanı Nakite Yaz", fontSize = 10.5.sp, color = Color(0xFF166534))
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = cashInput,
+                                    onValueChange = { cashInput = it },
+                                    placeholder = { Text("0.00") },
+                                    prefix = { Text("₺", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // 💳 KART GİRİŞİ
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("💳 Kredi Kartı Çekilen:", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = ForestGreen)
+                                    TextButton(
+                                        onClick = {
+                                            val n = parsedCash
+                                            val t = parsedTransfer
+                                            val rem = maxOf(0.0, amount - n - t)
+                                            cardInput = if (rem == rem.toInt().toDouble()) rem.toInt().toString() else "%.2f".format(rem)
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                    ) {
+                                        Text("Kalanı Karta Yaz", fontSize = 10.5.sp, color = ForestGreen)
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = cardInput,
+                                    onValueChange = { cardInput = it },
+                                    placeholder = { Text("0.00") },
+                                    prefix = { Text("₺", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // 📲 HAVALE (OPSİYONEL)
+                            Column {
+                                Text("📲 Havale / EFT (Varsa):", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E40AF))
+                                OutlinedTextField(
+                                    value = transferInput,
+                                    onValueChange = { transferInput = it },
+                                    placeholder = { Text("0.00 (Opsiyonel)") },
+                                    prefix = { Text("₺", fontWeight = FontWeight.Bold, color = ForestGreen) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // CANLI DURUM VE EŞLEŞME KONTROLÜ
+                            Surface(
+                                color = when {
+                                    kotlin.math.abs(diff) <= 0.01 -> SoftMintGreen
+                                    diff > 0.01 -> DangerRed.copy(alpha = 0.1f)
+                                    else -> WarmGold.copy(alpha = 0.15f)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Girilen Toplam:", fontSize = 10.5.sp, color = Slate500)
+                                        Text("₺${"%.2f".format(splitTotal)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                    }
+                                    when {
+                                        kotlin.math.abs(diff) <= 0.01 -> {
+                                            Text("✅ Tam Eşleşti", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                        }
+                                        diff > 0.01 -> {
+                                            Text("⚠️ ₺${"%.2f".format(diff)} Eksik", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DangerRed)
+                                        }
+                                        else -> {
+                                            Text("ℹ️ ₺${"%.2f".format(-diff)} Para Üstü", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -919,7 +1103,19 @@ fun PaymentMethodDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirmPayment(selectedMethod) },
+                onClick = {
+                    if (selectedMethod == "split") {
+                        val breakdown = SplitPaymentBreakdown(
+                            cashAmount = parsedCash,
+                            cardAmount = parsedCard,
+                            transferAmount = parsedTransfer
+                        )
+                        onConfirmPayment("split", breakdown)
+                    } else {
+                        onConfirmPayment(selectedMethod, null)
+                    }
+                },
+                enabled = isSplitValid,
                 colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
             ) {
                 Text("Ödemeyi Onayla & Kapat ✨", color = WarmGold, fontWeight = FontWeight.Bold)

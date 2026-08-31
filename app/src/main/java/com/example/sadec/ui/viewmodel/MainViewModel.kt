@@ -263,8 +263,16 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    fun payOrderItem(orderId: String, itemIndex: Int, paymentMethod: String = "card") {
-        val methodLabel = when (paymentMethod) {
+    fun payOrderItem(
+        orderId: String,
+        itemIndex: Int,
+        paymentMethod: String = "card",
+        breakdown: SplitPaymentBreakdown? = null
+    ) {
+        val isSplit = breakdown != null && breakdown.isSplit()
+        val methodLabel = if (isSplit) {
+            "Parçalı (Nakit: ₺${"%.2f".format(breakdown!!.cashAmount)} + Kart: ₺${"%.2f".format(breakdown.cardAmount)})"
+        } else when (paymentMethod) {
             "cash" -> "Nakit 💵"
             "card" -> "Kredi Kartı 💳"
             "transfer" -> "Havale/EFT 📲"
@@ -272,7 +280,7 @@ class MainViewModel @JvmOverloads constructor(
             else -> "Ödeme 💳"
         }
         viewModelScope.launch {
-            val res = firestoreRepository.payOrderItem(_restaurantId.value, orderId, itemIndex, true, paymentMethod)
+            val res = firestoreRepository.payOrderItem(_restaurantId.value, orderId, itemIndex, true, paymentMethod, breakdown)
             res.onSuccess {
                 _uiMessage.emit("Ürün ödemesi ($methodLabel) alındı! ✅")
             }.onFailure {
@@ -281,8 +289,15 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    fun payFullOrder(orderId: String, paymentMethod: String = "card") {
-        val methodLabel = when (paymentMethod) {
+    fun payFullOrder(
+        orderId: String,
+        paymentMethod: String = "card",
+        breakdown: SplitPaymentBreakdown? = null
+    ) {
+        val isSplit = breakdown != null && breakdown.isSplit()
+        val methodLabel = if (isSplit) {
+            "Parçalı (Nakit: ₺${"%.2f".format(breakdown!!.cashAmount)} + Kart: ₺${"%.2f".format(breakdown.cardAmount)})"
+        } else when (paymentMethod) {
             "cash" -> "Nakit 💵"
             "card" -> "Kredi Kartı 💳"
             "transfer" -> "Havale/EFT 📲"
@@ -290,7 +305,7 @@ class MainViewModel @JvmOverloads constructor(
             else -> "Ödeme 💳"
         }
         viewModelScope.launch {
-            val res = firestoreRepository.payFullOrder(_restaurantId.value, orderId, paymentMethod)
+            val res = firestoreRepository.payFullOrder(_restaurantId.value, orderId, paymentMethod, breakdown)
             res.onSuccess {
                 _uiMessage.emit("Hesap ($methodLabel) tahsil edildi ve kapatıldı! ✨")
             }.onFailure {
@@ -299,26 +314,50 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
-    fun payEntireTable(tableId: String, paymentMethod: String = "card") {
+    fun payEntireTable(
+        tableId: String,
+        paymentMethod: String = "card",
+        breakdown: SplitPaymentBreakdown? = null
+    ) {
         viewModelScope.launch {
             val tableOrders = _orders.value.filter { it.tableId == tableId && !it.isArchived && !it.isFullyPaid() }
-            for (order in tableOrders) {
-                firestoreRepository.payFullOrder(_restaurantId.value, order.id, paymentMethod)
-            }
-            _uiMessage.emit("Tüm masa ödemesi başarıyla alındı! 💳✅")
-        }
-    }
-
-    fun paySelectedItems(itemsToPay: List<SelectedItemRef>, paymentMethod: String = "card") {
-        viewModelScope.launch {
-            val methodLabel = when (paymentMethod) {
+            val isSplit = breakdown != null && breakdown.isSplit()
+            val methodLabel = if (isSplit) {
+                "Parçalı (Nakit: ₺${"%.2f".format(breakdown!!.cashAmount)} + Kart: ₺${"%.2f".format(breakdown.cardAmount)})"
+            } else when (paymentMethod) {
                 "cash" -> "Nakit 💵"
                 "card" -> "Kredi Kartı 💳"
                 "transfer" -> "Havale 📲"
                 "complimentary" -> "İkram 🎁"
                 else -> "Ödeme 💳"
             }
-            val res = firestoreRepository.payMultipleItems(_restaurantId.value, itemsToPay, paymentMethod)
+
+            val res = firestoreRepository.payEntireTableWithBreakdown(_restaurantId.value, tableOrders, paymentMethod, breakdown)
+            res.onSuccess {
+                _uiMessage.emit("Tüm masa ödemesi ($methodLabel) başarıyla alındı! 💳✅")
+            }.onFailure {
+                _uiMessage.emit("Masa ödemesi alınırken hata: ${it.localizedMessage}")
+            }
+        }
+    }
+
+    fun paySelectedItems(
+        itemsToPay: List<SelectedItemRef>,
+        paymentMethod: String = "card",
+        breakdown: SplitPaymentBreakdown? = null
+    ) {
+        viewModelScope.launch {
+            val isSplit = breakdown != null && breakdown.isSplit()
+            val methodLabel = if (isSplit) {
+                "Parçalı (Nakit: ₺${"%.2f".format(breakdown!!.cashAmount)} + Kart: ₺${"%.2f".format(breakdown.cardAmount)})"
+            } else when (paymentMethod) {
+                "cash" -> "Nakit 💵"
+                "card" -> "Kredi Kartı 💳"
+                "transfer" -> "Havale 📲"
+                "complimentary" -> "İkram 🎁"
+                else -> "Ödeme 💳"
+            }
+            val res = firestoreRepository.payMultipleItems(_restaurantId.value, itemsToPay, paymentMethod, breakdown)
             res.onSuccess {
                 _uiMessage.emit("${itemsToPay.size} ürünün ödemesi ($methodLabel) başarıyla alındı! ✅")
             }.onFailure {

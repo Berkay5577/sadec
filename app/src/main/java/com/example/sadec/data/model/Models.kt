@@ -113,10 +113,31 @@ data class Order(
     fun isFullyPaid(): Boolean = items.isEmpty() || items.all { it.isPaid || it.isComplimentary } || remainingAmount() <= 0.001
     fun remainingAmount(): Double = items.filter { !it.isPaid && !it.isComplimentary }.sumOf { it.effectivePrice() }
     fun paidAmount(): Double = items.filter { it.isPaid }.sumOf { it.effectivePrice() }
-    fun cashPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "cash" || (it.paymentMethod.isEmpty() && paymentMethod == "cash")) }.sumOf { it.effectivePrice() }
-    fun cardPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "card" || (it.paymentMethod.isEmpty() && (paymentMethod == "card" || paymentMethod.isEmpty()))) }.sumOf { it.effectivePrice() }
-    fun transferPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "transfer" || (it.paymentMethod.isEmpty() && paymentMethod == "transfer")) }.sumOf { it.effectivePrice() }
+    fun cashPaidAmount(): Double = items.filter { it.isPaid }.sumOf { item ->
+        if (item.cashPaid > 0.0 || item.cardPaid > 0.0 || item.transferPaid > 0.0) item.cashPaid
+        else if (item.paymentMethod == "cash" || (item.paymentMethod.isEmpty() && paymentMethod == "cash")) item.effectivePrice()
+        else 0.0
+    }
+    fun cardPaidAmount(): Double = items.filter { it.isPaid }.sumOf { item ->
+        if (item.cashPaid > 0.0 || item.cardPaid > 0.0 || item.transferPaid > 0.0) item.cardPaid
+        else if (item.paymentMethod == "card" || (item.paymentMethod.isEmpty() && (paymentMethod == "card" || paymentMethod.isEmpty()))) item.effectivePrice()
+        else 0.0
+    }
+    fun transferPaidAmount(): Double = items.filter { it.isPaid }.sumOf { item ->
+        if (item.cashPaid > 0.0 || item.cardPaid > 0.0 || item.transferPaid > 0.0) item.transferPaid
+        else if (item.paymentMethod == "transfer" || (item.paymentMethod.isEmpty() && paymentMethod == "transfer")) item.effectivePrice()
+        else 0.0
+    }
     fun complimentaryAmount(): Double = items.filter { it.isComplimentary }.sumOf { it.unitPrice * it.quantity } + if (isComplimentary) totalPrice else 0.0
+}
+
+data class SplitPaymentBreakdown(
+    val cashAmount: Double = 0.0,
+    val cardAmount: Double = 0.0,
+    val transferAmount: Double = 0.0
+) {
+    val total: Double get() = cashAmount + cardAmount + transferAmount
+    fun isSplit(): Boolean = listOf(cashAmount > 0, cardAmount > 0, transferAmount > 0).count { it } > 1
 }
 
 data class OrderItem(
@@ -125,13 +146,16 @@ data class OrderItem(
     val quantity: Int = 1,
     val unitPrice: Double = 0.0,
     val note: String = "",
-    val paymentMethod: String = "", // cash, card, transfer, complimentary
+    val paymentMethod: String = "", // cash, card, transfer, complimentary, split
     val discountAmount: Double = 0.0,
     @get:PropertyName("isComplimentary") @set:PropertyName("isComplimentary")
     var isComplimentary: Boolean = false,
     @get:PropertyName("isPaid") @set:PropertyName("isPaid")
     var isPaid: Boolean = false,
-    val paidAt: Long? = null
+    val paidAt: Long? = null,
+    val cashPaid: Double = 0.0,
+    val cardPaid: Double = 0.0,
+    val transferPaid: Double = 0.0
 ) {
     fun effectivePrice(): Double = if (isComplimentary) 0.0 else maxOf(0.0, (unitPrice * quantity) - discountAmount)
 }
