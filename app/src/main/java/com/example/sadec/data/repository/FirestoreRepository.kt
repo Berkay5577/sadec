@@ -207,72 +207,86 @@ class FirestoreRepository {
             var remTransfer = if (isSplit) breakdown!!.transferAmount else 0.0
 
             db.runTransaction { transaction ->
-                ordersGrouped.forEach { (orderId, targetList) ->
+                // 1. AŞAMA: TÜM OKUMALAR (READS)
+                val orderDocs = ordersGrouped.keys.map { orderId ->
                     val docRef = ordersCol.document(orderId)
                     val snapshot = transaction.get(docRef)
-                    val order = snapshot.toObject(Order::class.java) ?: return@forEach
-                    val rawItems = order.items.unbundled().toMutableList()
-                    val targetIndices = targetList.map { it.itemIndex }.toSet()
+                    val order = snapshot.toObject(Order::class.java)
+                    Triple(docRef, order, ordersGrouped[orderId] ?: emptyList())
+                }
 
-                    targetIndices.forEach { idx ->
-                        if (idx in rawItems.indices) {
-                            val item = rawItems[idx]
-                            val price = item.effectivePrice()
-                            if (isSplit) {
-                                val cashToTake = minOf(remCash, price)
-                                remCash = maxOf(0.0, remCash - cashToTake)
+                // 2. AŞAMA: HESAPLAMALAR
+                val updates = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Map<String, Any?>>>()
 
-                                val neededAfterCash = price - cashToTake
-                                val cardToTake = minOf(remCard, neededAfterCash)
-                                remCard = maxOf(0.0, remCard - cardToTake)
+                orderDocs.forEach { (docRef, order, targetList) ->
+                    if (order != null) {
+                        val rawItems = order.items.unbundled().toMutableList()
+                        val targetIndices = targetList.map { it.itemIndex }.toSet()
 
-                                val neededAfterCard = neededAfterCash - cardToTake
-                                val transferToTake = minOf(remTransfer, neededAfterCard)
-                                remTransfer = maxOf(0.0, remTransfer - transferToTake)
+                        targetIndices.forEach { idx ->
+                            if (idx in rawItems.indices) {
+                                val item = rawItems[idx]
+                                val price = item.effectivePrice()
+                                if (isSplit) {
+                                    val cashToTake = minOf(remCash, price)
+                                    remCash = maxOf(0.0, remCash - cashToTake)
 
-                                val method = when {
-                                    cashToTake > 0 && cardToTake == 0.0 && transferToTake == 0.0 -> "cash"
-                                    cardToTake > 0 && cashToTake == 0.0 && transferToTake == 0.0 -> "card"
-                                    transferToTake > 0 && cashToTake == 0.0 && cardToTake == 0.0 -> "transfer"
-                                    else -> "split"
+                                    val neededAfterCash = price - cashToTake
+                                    val cardToTake = minOf(remCard, neededAfterCash)
+                                    remCard = maxOf(0.0, remCard - cardToTake)
+
+                                    val neededAfterCard = neededAfterCash - cardToTake
+                                    val transferToTake = minOf(remTransfer, neededAfterCard)
+                                    remTransfer = maxOf(0.0, remTransfer - transferToTake)
+
+                                    val method = when {
+                                        cashToTake > 0 && cardToTake == 0.0 && transferToTake == 0.0 -> "cash"
+                                        cardToTake > 0 && cashToTake == 0.0 && transferToTake == 0.0 -> "card"
+                                        transferToTake > 0 && cashToTake == 0.0 && cardToTake == 0.0 -> "transfer"
+                                        else -> "split"
+                                    }
+
+                                    rawItems[idx] = item.copy(
+                                        isPaid = true,
+                                        paymentMethod = method,
+                                        cashPaid = cashToTake,
+                                        cardPaid = cardToTake,
+                                        transferPaid = transferToTake,
+                                        paidAt = System.currentTimeMillis()
+                                    )
+                                } else {
+                                    val isCash = paymentMethod == "cash"
+                                    val isCard = paymentMethod == "card" || paymentMethod.isEmpty()
+                                    val isTransfer = paymentMethod == "transfer"
+
+                                    rawItems[idx] = item.copy(
+                                        isPaid = true,
+                                        paymentMethod = paymentMethod,
+                                        cashPaid = if (isCash) price else 0.0,
+                                        cardPaid = if (isCard) price else 0.0,
+                                        transferPaid = if (isTransfer) price else 0.0,
+                                        paidAt = System.currentTimeMillis()
+                                    )
                                 }
-
-                                rawItems[idx] = item.copy(
-                                    isPaid = true,
-                                    paymentMethod = method,
-                                    cashPaid = cashToTake,
-                                    cardPaid = cardToTake,
-                                    transferPaid = transferToTake,
-                                    paidAt = System.currentTimeMillis()
-                                )
-                            } else {
-                                val isCash = paymentMethod == "cash"
-                                val isCard = paymentMethod == "card" || paymentMethod.isEmpty()
-                                val isTransfer = paymentMethod == "transfer"
-
-                                rawItems[idx] = item.copy(
-                                    isPaid = true,
-                                    paymentMethod = paymentMethod,
-                                    cashPaid = if (isCash) price else 0.0,
-                                    cardPaid = if (isCard) price else 0.0,
-                                    transferPaid = if (isTransfer) price else 0.0,
-                                    paidAt = System.currentTimeMillis()
-                                )
                             }
                         }
-                    }
 
-                    val isAllPaid = rawItems.isEmpty() || rawItems.all { it.isPaid || it.isComplimentary }
-                    val newStatus = if (isAllPaid) "delivered" else order.status
+                        val isAllPaid = rawItems.isEmpty() || rawItems.all { it.isPaid || it.isComplimentary }
+                        val newStatus = if (isAllPaid) "delivered" else order.status
 
-                    transaction.update(
-                        docRef,
-                        mapOf(
-                            "items" to rawItems,
-                            "status" to newStatus,
-                            "updatedAt" to FieldValue.serverTimestamp()
+                        updates.add(
+                            docRef to mapOf(
+                                "items" to rawItems,
+                                "status" to newStatus,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
                         )
-                    )
+                    }
+                }
+
+                // 3. AŞAMA: TÜM YAZMALAR (WRITES)
+                updates.forEach { (docRef, data) ->
+                    transaction.update(docRef, data)
                 }
             }.await()
             Result.success(Unit)
@@ -372,66 +386,79 @@ class FirestoreRepository {
             val ordersCol = db.collection("restaurants").document(restaurantId).collection("orders")
 
             db.runTransaction { transaction ->
-                tableOrders.forEach { order ->
+                // 1. AŞAMA: TÜM OKUMALAR (READS)
+                val orderDocs = tableOrders.map { order ->
                     val docRef = ordersCol.document(order.id)
                     val snapshot = transaction.get(docRef)
-                    val currentOrder = snapshot.toObject(Order::class.java) ?: return@forEach
+                    val currentOrder = snapshot.toObject(Order::class.java)
+                    Pair(docRef, currentOrder)
+                }
 
-                    val updatedItems = currentOrder.items.unbundled().map { it ->
-                        if (it.isPaid) return@map it
-                        val price = it.effectivePrice()
-                        if (isSplit) {
-                            val cashToTake = minOf(remCash, price)
-                            remCash = maxOf(0.0, remCash - cashToTake)
+                // 2. AŞAMA: HESAPLAMALAR
+                val updates = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Map<String, Any?>>>()
 
-                            val neededAfterCash = price - cashToTake
-                            val cardToTake = minOf(remCard, neededAfterCash)
-                            remCard = maxOf(0.0, remCard - cardToTake)
+                orderDocs.forEach { (docRef, currentOrder) ->
+                    if (currentOrder != null) {
+                        val updatedItems = currentOrder.items.unbundled().map { it ->
+                            if (it.isPaid) return@map it
+                            val price = it.effectivePrice()
+                            if (isSplit) {
+                                val cashToTake = minOf(remCash, price)
+                                remCash = maxOf(0.0, remCash - cashToTake)
 
-                            val neededAfterCard = neededAfterCash - cardToTake
-                            val transferToTake = minOf(remTransfer, neededAfterCard)
-                            remTransfer = maxOf(0.0, remTransfer - transferToTake)
+                                val neededAfterCash = price - cashToTake
+                                val cardToTake = minOf(remCard, neededAfterCash)
+                                remCard = maxOf(0.0, remCard - cardToTake)
 
-                            val method = when {
-                                cashToTake > 0 && cardToTake == 0.0 && transferToTake == 0.0 -> "cash"
-                                cardToTake > 0 && cashToTake == 0.0 && transferToTake == 0.0 -> "card"
-                                transferToTake > 0 && cashToTake == 0.0 && cardToTake == 0.0 -> "transfer"
-                                else -> "split"
+                                val neededAfterCard = neededAfterCash - cardToTake
+                                val transferToTake = minOf(remTransfer, neededAfterCard)
+                                remTransfer = maxOf(0.0, remTransfer - transferToTake)
+
+                                val method = when {
+                                    cashToTake > 0 && cardToTake == 0.0 && transferToTake == 0.0 -> "cash"
+                                    cardToTake > 0 && cashToTake == 0.0 && transferToTake == 0.0 -> "card"
+                                    transferToTake > 0 && cashToTake == 0.0 && cardToTake == 0.0 -> "transfer"
+                                    else -> "split"
+                                }
+
+                                it.copy(
+                                    isPaid = true,
+                                    paymentMethod = method,
+                                    cashPaid = cashToTake,
+                                    cardPaid = cardToTake,
+                                    transferPaid = transferToTake,
+                                    paidAt = it.paidAt ?: System.currentTimeMillis()
+                                )
+                            } else {
+                                val isCash = paymentMethod == "cash"
+                                val isCard = paymentMethod == "card" || paymentMethod.isEmpty()
+                                val isTransfer = paymentMethod == "transfer"
+
+                                it.copy(
+                                    isPaid = true,
+                                    paymentMethod = if (it.paymentMethod.isBlank()) paymentMethod else it.paymentMethod,
+                                    cashPaid = if (isCash) price else 0.0,
+                                    cardPaid = if (isCard) price else 0.0,
+                                    transferPaid = if (isTransfer) price else 0.0,
+                                    paidAt = it.paidAt ?: System.currentTimeMillis()
+                                )
                             }
-
-                            it.copy(
-                                isPaid = true,
-                                paymentMethod = method,
-                                cashPaid = cashToTake,
-                                cardPaid = cardToTake,
-                                transferPaid = transferToTake,
-                                paidAt = it.paidAt ?: System.currentTimeMillis()
-                            )
-                        } else {
-                            val isCash = paymentMethod == "cash"
-                            val isCard = paymentMethod == "card" || paymentMethod.isEmpty()
-                            val isTransfer = paymentMethod == "transfer"
-
-                            it.copy(
-                                isPaid = true,
-                                paymentMethod = if (it.paymentMethod.isBlank()) paymentMethod else it.paymentMethod,
-                                cashPaid = if (isCash) price else 0.0,
-                                cardPaid = if (isCard) price else 0.0,
-                                transferPaid = if (isTransfer) price else 0.0,
-                                paidAt = it.paidAt ?: System.currentTimeMillis()
-                            )
                         }
-                    }
 
-                    transaction.update(
-                        docRef,
-                        mapOf(
-                            "items" to updatedItems,
-                            "paymentMethod" to if (isSplit) "split" else paymentMethod,
-                            "status" to "delivered",
-                            "updatedAt" to FieldValue.serverTimestamp()
+                        updates.add(
+                            docRef to mapOf(
+                                "items" to updatedItems,
+                                "paymentMethod" to if (isSplit) "split" else paymentMethod,
+                                "status" to "delivered",
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
                         )
-                    )
+                    }
+                }
+
+                // 3. AŞAMA: TÜM YAZMALAR (WRITES)
+                updates.forEach { (docRef, data) ->
+                    transaction.update(docRef, data)
                 }
             }.await()
             Result.success(Unit)
