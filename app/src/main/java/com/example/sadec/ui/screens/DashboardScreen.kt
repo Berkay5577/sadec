@@ -112,46 +112,60 @@ fun DashboardScreen(
         orders.filter { !it.isArchived && it.status != "cancelled" && (it.status == "delivered" || it.items.any { item -> item.isPaid }) }
     }
 
-    // Completed / Paid orders in the active filter
+    // Payment Methods Breakdown (Gerçekleşen Net Tahsilatlar)
+    val cardTotal = remember(displayedOrders) { displayedOrders.sumOf { it.cardPaidAmount() } }
+    val cashTotal = remember(displayedOrders) { displayedOrders.sumOf { it.cashPaidAmount() } }
+    val transferTotal = remember(displayedOrders) { displayedOrders.sumOf { it.transferPaidAmount() } }
+    val complimentaryTotal = remember(displayedOrders) { displayedOrders.sumOf { it.complimentaryAmount() } }
+
+    // Net Kasaya Giren Ciro (Ödeme Türleri Toplamı ile %100 Birebir Eşit)
+    val totalRevenue = remember(cardTotal, cashTotal, transferTotal) {
+        cardTotal + cashTotal + transferTotal
+    }
+
+    // Masalarda Bekleyen / Henüz Tahsil Edilmemiş Açık Hesaplar
+    val pendingOrders = remember(displayedOrders) {
+        displayedOrders.filter { !it.isFullyPaid() }
+    }
+    val pendingRevenue = remember(pendingOrders) {
+        pendingOrders.sumOf { it.remainingAmount() }
+    }
+    val pendingOrdersCount = remember(pendingOrders) {
+        pendingOrders.size
+    }
+
+    // Ödemesi tamamlanmış veya kısmen ödenmiş adisyonlar
+    val paidOrders = remember(displayedOrders) {
+        displayedOrders.filter { it.items.any { item -> item.isPaid } }
+    }
+
+    // Completed / Paid orders in the active filter (Raporlar ve geçmiş için)
     val completedOrders = remember(displayedOrders) {
-        displayedOrders.filter { it.status == "delivered" || it.items.any { item -> item.isPaid } }
+        displayedOrders.filter { it.items.any { item -> item.isPaid } || it.status == "delivered" }
     }
 
-    // Total Net Revenue calculation
-    val totalRevenue = remember(completedOrders) {
-        completedOrders.sumOf { order ->
-            val paidItems = order.items.filter { it.isPaid }
-            if (paidItems.isNotEmpty()) paidItems.sumOf { it.effectivePrice() }
-            else order.totalPrice
-        }
+    val totalItemsSold = remember(displayedOrders) {
+        displayedOrders.sumOf { order ->
+            order.items.filter { it.isPaid }.sumOf { it.quantity }
+        }.let { if (it > 0) it else displayedOrders.sumOf { o -> o.items.sumOf { i -> i.quantity } } }
     }
 
-    // Payment Methods Breakdown
-    val cardTotal = remember(completedOrders) { completedOrders.sumOf { it.cardPaidAmount() } }
-    val cashTotal = remember(completedOrders) { completedOrders.sumOf { it.cashPaidAmount() } }
-    val transferTotal = remember(completedOrders) { completedOrders.sumOf { it.transferPaidAmount() } }
-    val complimentaryTotal = remember(completedOrders) { completedOrders.sumOf { it.complimentaryAmount() } }
-
-    val totalItemsSold = remember(completedOrders) {
-        completedOrders.sumOf { order ->
-            order.items.sumOf { it.quantity }
-        }
-    }
-
-    val avgPerTable = remember(completedOrders, totalRevenue) {
-        if (completedOrders.isNotEmpty()) totalRevenue / completedOrders.size else 0.0
+    val avgPerTable = remember(paidOrders, totalRevenue) {
+        if (paidOrders.isNotEmpty()) totalRevenue / paidOrders.size else 0.0
     }
 
     // Product Sales Stats
-    val productStats = remember(completedOrders) {
+    val productStats = remember(displayedOrders) {
         val map = mutableMapOf<String, Pair<Int, Double>>()
-        completedOrders.forEach { order ->
+        displayedOrders.forEach { order ->
             order.items.forEach { item ->
-                val prev = map.getOrDefault(item.name, Pair(0, 0.0))
-                map[item.name] = Pair(
-                    prev.first + item.quantity,
-                    prev.second + item.effectivePrice()
-                )
+                if (item.isPaid || order.status == "delivered") {
+                    val prev = map.getOrDefault(item.name, Pair(0, 0.0))
+                    map[item.name] = Pair(
+                        prev.first + item.quantity,
+                        prev.second + item.effectivePrice()
+                    )
+                }
             }
         }
         map.map { (name, pair) ->
@@ -358,7 +372,9 @@ fun DashboardScreen(
                 0 -> SalesAnalyticsTab(
                     dateFilterIndex = dateFilterIndex,
                     totalRevenue = totalRevenue,
-                    orderCount = completedOrders.size,
+                    pendingRevenue = pendingRevenue,
+                    pendingOrdersCount = pendingOrdersCount,
+                    orderCount = paidOrders.size.let { if (it > 0) it else completedOrders.size },
                     totalItemsSold = totalItemsSold,
                     avgPerTable = avgPerTable,
                     cardTotal = cardTotal,
@@ -637,6 +653,8 @@ fun DashboardScreen(
 fun SalesAnalyticsTab(
     dateFilterIndex: Int,
     totalRevenue: Double,
+    pendingRevenue: Double = 0.0,
+    pendingOrdersCount: Int = 0,
     orderCount: Int,
     totalItemsSold: Int,
     avgPerTable: Double,
@@ -652,9 +670,9 @@ fun SalesAnalyticsTab(
     onOpenManualCash: () -> Unit
 ) {
     val periodLabel = when (dateFilterIndex) {
-        0 -> "BUGÜNÜN NET CİROSU"
-        1 -> "BU HAFTANIN GENEL CİROSU"
-        else -> "TÜM GEÇMİŞ DÖNEM CİROSU"
+        0 -> "BUGÜNÜN NET TAHSİLATI"
+        1 -> "BU HAFTANIN NET TAHSİLATI"
+        else -> "TÜM GEÇMİŞ NET TAHSİLAT"
     }
 
     LazyColumn(
@@ -715,7 +733,7 @@ fun SalesAnalyticsTab(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Big Revenue Text
+                        // Big Revenue Text (Gerçekleşen Net Tahsilat)
                         Text(
                             text = "₺${"%.2f".format(totalRevenue)}",
                             fontSize = 32.sp,
@@ -737,7 +755,7 @@ fun SalesAnalyticsTab(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Column(modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)) {
-                                    Text("Adisyon", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f))
+                                    Text("Ödenen Adisyon", fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f))
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text("$orderCount Adet", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                 }
@@ -781,13 +799,25 @@ fun SalesAnalyticsTab(
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "ÖDEME & TAHSİLAT DAĞILIMI",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp,
-                        color = ForestGreen
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "ÖDEME & TAHSİLAT DAĞILIMI",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            color = ForestGreen
+                        )
+                        Text(
+                            text = "Toplam: ₺${"%.2f".format(cardTotal + cashTotal + transferTotal)}",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WarmGold
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -866,6 +896,47 @@ fun SalesAnalyticsTab(
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text("₺${"%.2f".format(complimentaryTotal)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 🪑 2.5. MASALARDA BEKLEYEN AÇIK HESAP BİLGİ KARTI
+        if (pendingRevenue > 0.0) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                    border = BorderStroke(1.2.dp, Color(0xFFFDE68A)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFFFEF3C7), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🪑", fontSize = 16.sp)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Masalarda Bekleyen Açık Hesap", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF92400E))
+                                Text("$pendingOrdersCount adisyonda henüz ödeme alınmadı", fontSize = 11.sp, color = Slate500)
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("₺${"%.2f".format(pendingRevenue)}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Color(0xFFB45309))
+                            Text("Açık Bakiye", fontSize = 10.sp, color = Slate500)
                         }
                     }
                 }
