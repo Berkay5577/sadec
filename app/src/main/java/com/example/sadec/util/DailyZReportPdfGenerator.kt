@@ -336,25 +336,14 @@ object DailyZReportPdfGenerator {
             fos.flush()
             fos.close()
 
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
+            ReportDownloader.saveToDownloadsAndOpen(
+                context = context,
+                sourceFile = file,
+                mimeType = "application/pdf",
+                displayName = fileName,
+                successMessage = "📥 Gün Sonu Z-Raporu İndirilenler klasörüne kaydedildi! 📄✨"
             )
 
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "$restaurantName - Gün Sonu Z-Raporu ($dateStr)")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-
-            context.startActivity(Intent.createChooser(shareIntent, "Gün Sonu Z-Raporunu Paylaş / Yazdır (PDF)").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-
-            Toast.makeText(context, "Gün Sonu Z-Raporu PDF olarak hazırlandı! 📄✨", Toast.LENGTH_LONG).show()
             onSuccess()
             return file
         } catch (e: Exception) {
