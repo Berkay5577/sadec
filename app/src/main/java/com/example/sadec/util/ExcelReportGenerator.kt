@@ -108,7 +108,7 @@ object ExcelReportGenerator {
                         "${it.quantity}x ${it.name}$compTag (₺${"%.2f".format(it.effectivePrice())})"
                     }
                     val orderItemsCount = order.items.sumOf { it.quantity }
-                    val orderNetRevenue = order.paidAmount().let { if (it > 0) it else order.totalPrice }
+                    val orderNetRevenue = order.cardPaidAmount() + order.cashPaidAmount() + order.transferPaidAmount()
                     val orderDiscount = order.items.sumOf { it.discountAmount } + order.complimentaryAmount()
 
                     val methodsUsed = order.items.mapNotNull {

@@ -190,7 +190,7 @@ fun DashboardScreen(
         }.sortedByDescending { it.totalRevenue }
     }
 
-    // Day-by-Day Stats for the Active Week
+    // Day-by-Day Stats for the Active Week (Her günün cirosu Kart + Nakit + Havale toplamı ile %100 birebir eşittir)
     val weeklyDayStats = remember(activeWeeklyOrders) {
         val sdfDay = SimpleDateFormat("EEEE", Locale("tr", "TR"))
         val grouped = activeWeeklyOrders.groupBy { order ->
@@ -199,15 +199,20 @@ fun DashboardScreen(
         grouped.map { (dKey, dOrders) ->
             val sampleDate = dOrders.firstOrNull()?.createdAt
             val dayName = sampleDate?.let { sdfDay.format(it).uppercase(Locale("tr")) } ?: ""
+            val dayCard = dOrders.sumOf { it.cardPaidAmount() }
+            val dayCash = dOrders.sumOf { it.cashPaidAmount() }
+            val dayTransfer = dOrders.sumOf { it.transferPaidAmount() }
+            val dayTotal = dayCard + dayCash + dayTransfer
+
             DaySummaryStat(
                 dateKey = dKey,
                 dayName = dayName,
-                orderCount = dOrders.size,
-                itemsCount = dOrders.sumOf { it.items.sumOf { i -> i.quantity } },
-                cardRevenue = dOrders.sumOf { it.cardPaidAmount() },
-                cashRevenue = dOrders.sumOf { it.cashPaidAmount() },
-                transferRevenue = dOrders.sumOf { it.transferPaidAmount() },
-                totalRevenue = dOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
+                orderCount = dOrders.count { it.items.any { item -> item.isPaid } || it.status == "delivered" },
+                itemsCount = dOrders.sumOf { it.items.filter { item -> item.isPaid }.sumOf { i -> i.quantity } }.let { if (it > 0) it else dOrders.sumOf { o -> o.items.sumOf { i -> i.quantity } } },
+                cardRevenue = dayCard,
+                cashRevenue = dayCash,
+                transferRevenue = dayTransfer,
+                totalRevenue = dayTotal
             )
         }
     }
@@ -411,7 +416,7 @@ fun DashboardScreen(
                 )
                 1 -> DayByDayWeeklyTab(
                     weeklyDayStats = weeklyDayStats,
-                    totalWeeklyRevenue = activeWeeklyOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
+                    totalWeeklyRevenue = weeklyDayStats.sumOf { it.totalRevenue }
                 )
                 2 -> TableAnalyticsTab(
                     totalRevenue = totalRevenue,
@@ -546,7 +551,7 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        val weeklyNet = activeWeeklyOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
+                        val weeklyNet = activeWeeklyOrders.sumOf { it.cardPaidAmount() + it.cashPaidAmount() + it.transferPaidAmount() }
                         Surface(
                             color = SoftMintGreen,
                             shape = RoundedCornerShape(12.dp),
@@ -1231,6 +1236,18 @@ fun DayByDayWeeklyTab(
                                 Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Nakit", fontSize = 10.sp, color = Color(0xFF166534))
                                     Text("₺${"%.2f".format(stat.cashRevenue)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                                }
+                            }
+                            if (stat.transferRevenue > 0) {
+                                Surface(
+                                    color = Color(0xFFEFF6FF),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.weight(1.2f)
+                                ) {
+                                    Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Havale", fontSize = 10.sp, color = Color(0xFF1E40AF))
+                                        Text("₺${"%.2f".format(stat.transferRevenue)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
+                                    }
                                 }
                             }
                         }

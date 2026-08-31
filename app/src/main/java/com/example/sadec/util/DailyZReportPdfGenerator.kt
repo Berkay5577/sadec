@@ -37,10 +37,10 @@ object DailyZReportPdfGenerator {
     ): File? {
         val completedOrders = orders.filter { it.status == "delivered" || it.items.any { item -> item.isPaid } }
 
-        val totalNet = completedOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
         val totalCard = completedOrders.sumOf { it.cardPaidAmount() }
         val totalCash = completedOrders.sumOf { it.cashPaidAmount() }
         val totalTransfer = completedOrders.sumOf { it.transferPaidAmount() }
+        val totalNet = totalCard + totalCash + totalTransfer
         val totalComp = completedOrders.sumOf { it.complimentaryAmount() }
         val totalItemsSold = completedOrders.sumOf { it.items.sumOf { i -> i.quantity } }
 

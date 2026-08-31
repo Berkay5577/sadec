@@ -31,10 +31,10 @@ object WeeklyReportPdfGenerator {
         val completedOrders = orders.filter { it.status == "delivered" || it.items.any { item -> item.isPaid } }
             .sortedBy { it.createdAt?.time ?: 0L }
 
-        val totalRevenue = completedOrders.sumOf { it.paidAmount().let { p -> if (p > 0) p else it.totalPrice } }
         val totalCard = completedOrders.sumOf { it.cardPaidAmount() }
         val totalCash = completedOrders.sumOf { it.cashPaidAmount() }
         val totalTransfer = completedOrders.sumOf { it.transferPaidAmount() }
+        val totalRevenue = totalCard + totalCash + totalTransfer
         val totalComp = completedOrders.sumOf { it.complimentaryAmount() }
         val totalItemsSold = completedOrders.sumOf { it.items.sumOf { item -> item.quantity } }
 
@@ -165,7 +165,8 @@ object WeeklyReportPdfGenerator {
                         val dItems = dOrders.sumOf { ord -> ord.items.sumOf { i -> i.quantity } }
                         val dCard = dOrders.sumOf { ord -> ord.cardPaidAmount() }
                         val dCash = dOrders.sumOf { ord -> ord.cashPaidAmount() }
-                        val dRev = dOrders.sumOf { ord -> ord.paidAmount().let { p -> if (p > 0) p else ord.totalPrice } }
+                        val dTransfer = dOrders.sumOf { ord -> ord.transferPaidAmount() }
+                        val dRev = dCard + dCash + dTransfer
 
                         paint.color = if (dIdx % 2 == 0) Color.WHITE else 0xFFF7FAF8.toInt()
                         paint.style = Paint.Style.FILL
