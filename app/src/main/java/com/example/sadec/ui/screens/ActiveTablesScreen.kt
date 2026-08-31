@@ -42,14 +42,17 @@ fun ActiveTablesScreen(
     val orders by viewModel.orders.collectAsState()
     val menuItems by viewModel.menuItems.collectAsState()
 
-    // Active unarchived orders with unpaid items (even if delivered, orders stay in Masalar until fully paid!)
+    // Active unarchived orders with unpaid items (kalan hesabı 0'dan büyük olan aktif siparişler)
     val activeOrders = remember(orders) {
-        orders.filter { !it.isArchived && it.status != "cancelled" && !it.isFullyPaid() }
+        orders.filter { !it.isArchived && it.status != "cancelled" && !it.isFullyPaid() && it.remainingAmount() > 0.001 }
     }
 
-    // ONLY tables that have active unpaid orders. Empty/fully paid tables do NOT show up here!
+    // ONLY tables that have active unpaid orders with a positive remaining amount
     val activeTables = remember(tables, activeOrders) {
-        tables.filter { table -> activeOrders.any { ord -> ord.tableId == table.id } }
+        tables.filter { table ->
+            val tableOrders = activeOrders.filter { ord -> ord.tableId == table.id }
+            tableOrders.isNotEmpty() && tableOrders.sumOf { it.remainingAmount() } > 0.001
+        }
     }
 
     val totalRemainingAmount = remember(activeOrders) {

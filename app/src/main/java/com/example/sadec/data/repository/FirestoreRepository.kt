@@ -163,7 +163,7 @@ class FirestoreRepository {
                         paymentMethod = if (isPaid) paymentMethod else "",
                         paidAt = if (isPaid) System.currentTimeMillis() else null
                     )
-                    val isAllPaid = updatedItems.isNotEmpty() && updatedItems.all { it.isPaid }
+                    val isAllPaid = updatedItems.isEmpty() || updatedItems.all { it.isPaid || it.isComplimentary }
                     val newStatus = if (isAllPaid) "delivered" else order.status
                     transaction.update(
                         docRef,

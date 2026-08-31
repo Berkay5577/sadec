@@ -110,8 +110,8 @@ data class Order(
     @ServerTimestamp val createdAt: Date? = null,
     @ServerTimestamp val updatedAt: Date? = null
 ) {
-    fun isFullyPaid(): Boolean = items.isNotEmpty() && items.all { it.isPaid }
-    fun remainingAmount(): Double = items.filter { !it.isPaid }.sumOf { it.effectivePrice() }
+    fun isFullyPaid(): Boolean = items.isEmpty() || items.all { it.isPaid || it.isComplimentary } || remainingAmount() <= 0.001
+    fun remainingAmount(): Double = items.filter { !it.isPaid && !it.isComplimentary }.sumOf { it.effectivePrice() }
     fun paidAmount(): Double = items.filter { it.isPaid }.sumOf { it.effectivePrice() }
     fun cashPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "cash" || (it.paymentMethod.isEmpty() && paymentMethod == "cash")) }.sumOf { it.effectivePrice() }
     fun cardPaidAmount(): Double = items.filter { it.isPaid && (it.paymentMethod == "card" || (it.paymentMethod.isEmpty() && (paymentMethod == "card" || paymentMethod.isEmpty()))) }.sumOf { it.effectivePrice() }
