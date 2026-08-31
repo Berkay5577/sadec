@@ -731,23 +731,30 @@ btnSubmitOrder.addEventListener("click", async () => {
   const totalPrice = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
   const generalNote = cartOrderNote.value.trim();
 
-  const orderData = {
-    tableId: currentTableId,
-    tableLabel: currentTableLabel,
-    customerName: customerName,
-    status: "pending",
-    totalPrice: totalPrice,
-    note: generalNote,
-    items: cart.map(item => ({
-      menuItemId: item.menuItemId,
-      name: item.name,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      note: item.note || ""
-    })),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
+    const unbundledItems = [];
+    cart.forEach(item => {
+      for (let q = 0; q < item.quantity; q++) {
+        unbundledItems.push({
+          menuItemId: item.menuItemId,
+          name: item.name,
+          quantity: 1,
+          unitPrice: item.unitPrice,
+          note: item.note || ""
+        });
+      }
+    });
+
+    const orderData = {
+      tableId: currentTableId,
+      tableLabel: currentTableLabel,
+      customerName: customerName,
+      status: "pending",
+      totalPrice: totalPrice,
+      note: generalNote,
+      items: unbundledItems,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
 
   try {
     const docRef = await db.collection("restaurants").doc(currentRestId).collection("orders").add(orderData);

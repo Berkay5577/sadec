@@ -2,6 +2,7 @@ package com.example.sadec.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.example.sadec.data.model.MenuItem
 import com.example.sadec.data.model.Order
 import com.example.sadec.data.model.OrderItem
+import com.example.sadec.data.model.SelectedItemRef
 import com.example.sadec.data.model.TableItem
 import com.example.sadec.ui.theme.*
 import com.example.sadec.ui.viewmodel.MainViewModel
@@ -61,7 +63,7 @@ fun ActiveTablesScreen(
 
     // State for Transfer Modal
     var tableToTransfer by remember { mutableStateOf<TableItem?>(null) }
-    // State for Payment Method Modal (item or full table)
+    // State for Payment Method Modal (item, selected items, or full table)
     var paymentTarget by remember { mutableStateOf<PaymentTarget?>(null) }
     // State for Discount / Complimentary Modal
     var discountTarget by remember { mutableStateOf<DiscountTarget?>(null) }
@@ -177,6 +179,9 @@ fun ActiveTablesScreen(
                         orders = tableOrders,
                         tableRemaining = tableRemaining,
                         onOpenTransfer = { tableToTransfer = table },
+                        onPaySelectedItemsClick = { tableId, tableLabel, selectedItems, amount ->
+                            paymentTarget = PaymentTarget.SelectedItems(tableId, tableLabel, selectedItems, amount)
+                        },
                         onPayItemClick = { orderId, itemIdx, item ->
                             paymentTarget = PaymentTarget.Item(orderId, itemIdx, item.name, item.effectivePrice())
                         },
@@ -229,6 +234,9 @@ fun ActiveTablesScreen(
                     is PaymentTarget.FullTable -> {
                         viewModel.payEntireTable(target.tableId, method)
                     }
+                    is PaymentTarget.SelectedItems -> {
+                        viewModel.paySelectedItems(target.selectedItems, method)
+                    }
                 }
                 paymentTarget = null
             }
@@ -269,6 +277,12 @@ fun ActiveTablesScreen(
 sealed class PaymentTarget {
     data class Item(val orderId: String, val itemIndex: Int, val itemName: String, val amount: Double) : PaymentTarget()
     data class FullTable(val tableId: String, val tableLabel: String, val amount: Double) : PaymentTarget()
+    data class SelectedItems(
+        val tableId: String,
+        val tableLabel: String,
+        val selectedItems: List<SelectedItemRef>,
+        val amount: Double
+    ) : PaymentTarget()
 }
 
 data class DiscountTarget(
@@ -292,12 +306,32 @@ fun ActiveTableOrderCard(
     orders: List<Order>,
     tableRemaining: Double,
     onOpenTransfer: () -> Unit,
+    onPaySelectedItemsClick: (tableId: String, tableLabel: String, selectedItems: List<SelectedItemRef>, amount: Double) -> Unit,
     onPayItemClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit,
     onPayFullTableClick: () -> Unit,
     onDiscountClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit,
     onEditItemClick: (orderId: String, itemIndex: Int, item: OrderItem) -> Unit
 ) {
     val sdfTime = SimpleDateFormat("HH:mm", Locale("tr"))
+    var selectedItemKeys by remember { mutableStateOf<Set<String>>(emptySet()) } // key: "${order.id}_$itemIdx"
+
+    // List of selected unpaid items for this table
+    val selectedItemsList = remember(selectedItemKeys, orders) {
+        val list = mutableListOf<SelectedItemRef>()
+        orders.forEach { order ->
+            order.items.forEachIndexed { idx, item ->
+                if (!item.isPaid && selectedItemKeys.contains("${order.id}_$idx")) {
+                    list.add(SelectedItemRef(order.id, idx, item.name, item.effectivePrice()))
+                }
+            }
+        }
+        list
+    }
+    val selectedTotal = remember(selectedItemsList) { selectedItemsList.sumOf { it.amount } }
+
+    val totalUnpaidCount = remember(orders) {
+        orders.sumOf { it.items.count { item -> !item.isPaid } }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -398,132 +432,169 @@ fun ActiveTableOrderCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Item-by-item listing with payment and discount options
+                // Item-by-item listing with Checkbox multi-select and individual actions
                 order.items.forEachIndexed { itemIdx, item ->
-                    Row(
+                    val itemKey = "${order.id}_$itemIdx"
+                    val isSelected = selectedItemKeys.contains(itemKey)
+
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .then(
-                                    if (!item.isPaid) {
-                                        Modifier
-                                            .clickable { onEditItemClick(order.id, itemIdx, item) }
-                                            .padding(vertical = 2.dp, horizontal = 2.dp)
-                                    } else {
-                                        Modifier.padding(vertical = 2.dp, horizontal = 2.dp)
-                                    }
-                                )
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "${item.quantity}x ${item.name}",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.sp,
-                                    color = if (item.isPaid) Slate500 else ForestGreen
-                                )
+                            .padding(vertical = 3.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .then(
                                 if (!item.isPaid) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Ürünü / Fiyatı Düzenle",
-                                        tint = ForestGreen.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                }
-                                if (item.isComplimentary) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        color = Color(0xFFFEF3C7),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text("İKRAM 🎁", color = Color(0xFFB45309), fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
-                                    }
-                                } else if (item.discountAmount > 0) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        color = Color(0xFFDCFCE7),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text("-₺${"%.2f".format(item.discountAmount)} 🏷️", color = Color(0xFF166534), fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
-                                    }
-                                }
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (item.isComplimentary) {
-                                    Text(
-                                        text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
-                                        fontSize = 11.sp,
-                                        color = Slate500,
-                                        textDecoration = TextDecoration.LineThrough
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(text = "₺0,00", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                                    Modifier
+                                        .border(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) ForestGreen else ForestGreen.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable {
+                                            selectedItemKeys = if (isSelected) selectedItemKeys - itemKey else selectedItemKeys + itemKey
+                                        }
                                 } else {
-                                    Text(
-                                        text = "₺${"%.2f".format(item.effectivePrice())}",
-                                        fontSize = 12.sp,
-                                        color = if (item.isPaid) Slate500 else WarmGold,
-                                        fontWeight = FontWeight.Bold
+                                    Modifier
+                                }
+                            ),
+                        color = if (isSelected) SoftMintGreen.copy(alpha = 0.5f) else if (item.isPaid) Slate100.copy(alpha = 0.4f) else Color.Transparent,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (!item.isPaid) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            selectedItemKeys = if (checked) selectedItemKeys + itemKey else selectedItemKeys - itemKey
+                                        },
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = ForestGreen,
+                                            checkmarkColor = WarmGold,
+                                            uncheckedColor = ForestGreen.copy(alpha = 0.6f)
+                                        ),
+                                        modifier = Modifier.size(24.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                 }
 
-                                if (item.isPaid && item.paymentMethod.isNotBlank()) {
-                                    val methodLabel = when (item.paymentMethod) {
-                                        "cash" -> " (Nakit 💵)"
-                                        "card" -> " (Kart 💳)"
-                                        "transfer" -> " (Havale 📲)"
-                                        "complimentary" -> " (İkram 🎁)"
-                                        else -> ""
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "1x ${item.name}",
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            color = if (item.isPaid) Slate500 else ForestGreen
+                                        )
+                                        if (!item.isPaid) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Ürünü / Fiyatı Düzenle",
+                                                tint = ForestGreen.copy(alpha = 0.6f),
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable { onEditItemClick(order.id, itemIdx, item) }
+                                            )
+                                        }
+                                        if (item.isComplimentary) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Surface(
+                                                color = Color(0xFFFEF3C7),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text("İKRAM 🎁", color = Color(0xFFB45309), fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                            }
+                                        } else if (item.discountAmount > 0) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Surface(
+                                                color = Color(0xFFDCFCE7),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text("-₺${"%.2f".format(item.discountAmount)} 🏷️", color = Color(0xFF166534), fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                            }
+                                        }
                                     }
-                                    Text(text = methodLabel, fontSize = 10.sp, color = Slate500)
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (item.isComplimentary) {
+                                            Text(
+                                                text = "₺${"%.2f".format(item.unitPrice * item.quantity)}",
+                                                fontSize = 11.sp,
+                                                color = Slate500,
+                                                textDecoration = TextDecoration.LineThrough
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(text = "₺0,00", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                                        } else {
+                                            Text(
+                                                text = "₺${"%.2f".format(item.effectivePrice())}",
+                                                fontSize = 12.sp,
+                                                color = if (item.isPaid) Slate500 else WarmGold,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        if (item.isPaid && item.paymentMethod.isNotBlank()) {
+                                            val methodLabel = when (item.paymentMethod) {
+                                                "cash" -> " (Nakit 💵)"
+                                                "card" -> " (Kart 💳)"
+                                                "transfer" -> " (Havale 📲)"
+                                                "complimentary" -> " (İkram 🎁)"
+                                                else -> ""
+                                            }
+                                            Text(text = methodLabel, fontSize = 10.sp, color = Slate500)
+                                        }
+                                    }
+
+                                    if (item.note.isNotBlank()) {
+                                        Text(text = "↳ Not: ${item.note}", fontSize = 11.sp, color = Color(0xFFD97706))
+                                    }
                                 }
                             }
 
-                            if (item.note.isNotBlank()) {
-                                Text(text = "↳ Not: ${item.note}", fontSize = 11.sp, color = Color(0xFFD97706))
-                            }
-                        }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (!item.isPaid) {
+                                    // İkram / İndirim Butonu
+                                    IconButton(
+                                        onClick = { onDiscountClick(order.id, itemIdx, item) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Text("🎁", fontSize = 14.sp)
+                                    }
 
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (!item.isPaid) {
-                                // İkram / İndirim Butonu
-                                IconButton(
-                                    onClick = { onDiscountClick(order.id, itemIdx, item) },
-                                    modifier = Modifier.size(30.dp)
-                                ) {
-                                    Text("🎁", fontSize = 14.sp)
-                                }
-
-                                // Öde Butonu
-                                Button(
-                                    onClick = { onPayItemClick(order.id, itemIdx, item) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text("Öde 💳", color = WarmGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            } else {
-                                Surface(
-                                    color = SoftMintGreen,
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = "Ödendi ✅",
-                                        color = ForestGreen,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    // Tek Başına Öde Butonu
+                                    Button(
+                                        onClick = { onPayItemClick(order.id, itemIdx, item) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Öde 💳", color = WarmGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Surface(
+                                        color = SoftMintGreen,
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Ödendi ✅",
+                                            color = ForestGreen,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -533,22 +604,82 @@ fun ActiveTableOrderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Full Table Payment Button
-            Button(
-                onClick = onPayFullTableClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
-            ) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmGold, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+            // Action Buttons
+            if (selectedItemsList.isNotEmpty()) {
+                // 1. SEÇİLEN ÜRÜNLERİN ÖDEMESİNİ AL BUTONU
+                Button(
+                    onClick = {
+                        onPaySelectedItemsClick(table.id, table.label, selectedItemsList, selectedTotal)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                ) {
+                    Icon(Icons.Default.CreditCard, contentDescription = null, tint = WarmGold, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Seçilenleri Öde (${selectedItemsList.size} Ürün • ₺${"%.2f".format(selectedTotal)}) 💳",
+                        color = WarmGold,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = { selectedItemKeys = emptySet() },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text("✕ Seçimi Temizle", fontSize = 11.5.sp, color = DangerRed)
+                    }
+
+                    TextButton(
+                        onClick = {
+                            val allUnpaid = mutableSetOf<String>()
+                            orders.forEach { o ->
+                                o.items.forEachIndexed { i, itm ->
+                                    if (!itm.isPaid) allUnpaid.add("${o.id}_$i")
+                                }
+                            }
+                            selectedItemKeys = allUnpaid
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text("Tümünü Seç ($totalUnpaidCount)", fontSize = 11.5.sp, color = ForestGreen, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                // 2. SEÇİM YOKSA: TÜM MASAYI KAPAT BUTONU
+                Button(
+                    onClick = onPayFullTableClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ForestGreen)
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = WarmGold, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Masanın Kalanını Kapat (₺${"%.2f".format(tableRemaining)}) ✨",
+                        color = WarmGold,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Masanın Kalanını Kapat (₺${"%.2f".format(tableRemaining)}) ✨",
-                    color = WarmGold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    text = "💡 Ayrı ayrı ödeme almak için ödenecek ürünlerin kutucuklarını seçin.",
+                    fontSize = 10.5.sp,
+                    color = Slate500,
+                    modifier = Modifier.padding(start = 2.dp)
                 )
             }
         }
@@ -718,11 +849,13 @@ fun PaymentMethodDialog(
     val title = when (target) {
         is PaymentTarget.Item -> "Ürün Ödemesi: ${target.itemName}"
         is PaymentTarget.FullTable -> "${target.tableLabel} Toplam Hesap"
+        is PaymentTarget.SelectedItems -> "${target.tableLabel} • Seçilen ${target.selectedItems.size} Ürün"
     }
 
     val amount = when (target) {
         is PaymentTarget.Item -> target.amount
         is PaymentTarget.FullTable -> target.amount
+        is PaymentTarget.SelectedItems -> target.amount
     }
 
     AlertDialog(

@@ -309,6 +309,24 @@ class MainViewModel @JvmOverloads constructor(
         }
     }
 
+    fun paySelectedItems(itemsToPay: List<SelectedItemRef>, paymentMethod: String = "card") {
+        viewModelScope.launch {
+            val methodLabel = when (paymentMethod) {
+                "cash" -> "Nakit 💵"
+                "card" -> "Kredi Kartı 💳"
+                "transfer" -> "Havale 📲"
+                "complimentary" -> "İkram 🎁"
+                else -> "Ödeme 💳"
+            }
+            val res = firestoreRepository.payMultipleItems(_restaurantId.value, itemsToPay, paymentMethod)
+            res.onSuccess {
+                _uiMessage.emit("${itemsToPay.size} ürünün ödemesi ($methodLabel) başarıyla alındı! ✅")
+            }.onFailure {
+                _uiMessage.emit("Ödeme alınırken hata: ${it.localizedMessage}")
+            }
+        }
+    }
+
     fun transferEntireTable(fromTableId: String, toTableId: String, toTableLabel: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val res = firestoreRepository.transferEntireTable(_restaurantId.value, fromTableId, toTableId, toTableLabel)

@@ -136,6 +136,28 @@ data class OrderItem(
     fun effectivePrice(): Double = if (isComplimentary) 0.0 else maxOf(0.0, (unitPrice * quantity) - discountAmount)
 }
 
+data class SelectedItemRef(
+    val orderId: String = "",
+    val itemIndex: Int = 0,
+    val itemName: String = "",
+    val amount: Double = 0.0
+)
+
+fun List<OrderItem>.unbundled(): List<OrderItem> {
+    return this.flatMap { item ->
+        if (item.quantity > 1) {
+            List(item.quantity) {
+                item.copy(
+                    quantity = 1,
+                    discountAmount = if (item.discountAmount > 0) item.discountAmount / item.quantity else 0.0
+                )
+            }
+        } else {
+            listOf(item)
+        }
+    }
+}
+
 data class Staff(
     @DocumentId val id: String = "",
     val name: String = "",

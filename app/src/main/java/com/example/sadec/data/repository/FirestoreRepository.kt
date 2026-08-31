@@ -84,7 +84,9 @@ class FirestoreRepository {
 
             if (snapshot != null) {
                 val orders = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Order::class.java)?.copy(id = doc.id)
+                    doc.toObject(Order::class.java)?.let { ord ->
+                        ord.copy(id = doc.id, items = ord.items.unbundled())
+                    }
                 }
                 trySend(orders)
             }
@@ -95,10 +97,11 @@ class FirestoreRepository {
 
     suspend fun createOrder(restaurantId: String, order: Order): Result<String> {
         return try {
+            val normalizedOrder = order.copy(items = order.items.unbundled())
             val docRef = db.collection("restaurants")
                 .document(restaurantId)
                 .collection("orders")
-                .add(order)
+                .add(normalizedOrder)
                 .await()
             Result.success(docRef.id)
         } catch (e: Exception) {
@@ -155,7 +158,7 @@ class FirestoreRepository {
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(docRef)
                 val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
-                val updatedItems = order.items.toMutableList()
+                val updatedItems = order.items.unbundled().toMutableList()
                 if (itemIndex in updatedItems.indices) {
                     val targetItem = updatedItems[itemIndex]
                     updatedItems[itemIndex] = targetItem.copy(
@@ -181,13 +184,60 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun payMultipleItems(
+        restaurantId: String,
+        itemsToPay: List<SelectedItemRef>,
+        paymentMethod: String = "card"
+    ): Result<Unit> {
+        return try {
+            val ordersGrouped = itemsToPay.groupBy { it.orderId }
+            val ordersCol = db.collection("restaurants").document(restaurantId).collection("orders")
+
+            db.runTransaction { transaction ->
+                ordersGrouped.forEach { (orderId, targetList) ->
+                    val docRef = ordersCol.document(orderId)
+                    val snapshot = transaction.get(docRef)
+                    val order = snapshot.toObject(Order::class.java) ?: return@forEach
+                    val rawItems = order.items.unbundled().toMutableList()
+                    val targetIndices = targetList.map { it.itemIndex }.toSet()
+
+                    targetIndices.forEach { idx ->
+                        if (idx in rawItems.indices) {
+                            val item = rawItems[idx]
+                            rawItems[idx] = item.copy(
+                                isPaid = true,
+                                paymentMethod = paymentMethod,
+                                paidAt = System.currentTimeMillis()
+                            )
+                        }
+                    }
+
+                    val isAllPaid = rawItems.isEmpty() || rawItems.all { it.isPaid || it.isComplimentary }
+                    val newStatus = if (isAllPaid) "delivered" else order.status
+
+                    transaction.update(
+                        docRef,
+                        mapOf(
+                            "items" to rawItems,
+                            "status" to newStatus,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+            }.await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun payFullOrder(restaurantId: String, orderId: String, paymentMethod: String = "card"): Result<Unit> {
         return try {
             val docRef = db.collection("restaurants").document(restaurantId).collection("orders").document(orderId)
             db.runTransaction { transaction ->
                 val snapshot = transaction.get(docRef)
                 val order = snapshot.toObject(Order::class.java) ?: return@runTransaction
-                val updatedItems = order.items.map {
+                val updatedItems = order.items.unbundled().map {
                     it.copy(
                         isPaid = true,
                         paymentMethod = if (it.paymentMethod.isBlank()) paymentMethod else it.paymentMethod,
