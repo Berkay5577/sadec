@@ -90,9 +90,8 @@ fun SettingsScreen(
         }
     }
 
-    // --- CİHAZ YETKİ & PIN STATE ---
-    val isStaffMode by viewModel.isStaffMode.collectAsState()
-    var showPinDialogToSwitchMode by remember { mutableStateOf(false) }
+    // --- DASHBOARD PIN GÜVENLİK STATE ---
+    var showPinDialogForDashboard by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -176,130 +175,69 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. 🛡️ CİHAZ YETKİ & KULLANICI MODU KARTI (YÖNETİCİ / GARSON)
+            // 2. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER (PIN KORUMALI)
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showPinDialogForDashboard = true },
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isStaffMode) SoftMintGreen else ForestGreen
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-                border = BorderStroke(1.5.dp, if (isStaffMode) SageGreen.copy(alpha = 0.6f) else WarmGold.copy(alpha = 0.6f))
+                colors = CardDefaults.cardColors(containerColor = ForestGreen),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.5f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                            Text(if (isStaffMode) "☕" else "👑", fontSize = 24.sp)
-                            Column {
-                                Text(
-                                    text = if (isStaffMode) "Garson / Çalışan Modu" else "Yönetici / Patron Modu",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    color = if (isStaffMode) ForestGreen else WarmGold
-                                )
-                                Text(
-                                    text = if (isStaffMode) "Kasa & Ciro Dashboard gizli 🔒" else "Tüm Kasa & Rapor yetkileri açık ✨",
-                                    fontSize = 11.sp,
-                                    color = if (isStaffMode) ForestGreen.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-
-                        if (isStaffMode) {
-                            Button(
-                                onClick = { showPinDialogToSwitchMode = true },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.LockOpen, contentDescription = null, tint = WarmGold, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Yöneticiye Geç", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                            }
-                        } else {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(
-                                    onClick = { showChangePinDialog = true },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WarmGold),
-                                    border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.6f)),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    Icon(Icons.Default.Pin, contentDescription = null, tint = WarmGold, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("PIN Değiştir", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                                }
-
-                                Button(
-                                    onClick = { viewModel.setStaffMode(true) },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Text("☕ Garson Modu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER (SADECE YÖNETİCİ MODUNDA GÖZÜKÜR)
-            if (!isStaffMode) {
-                Card(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateToDashboard() },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = ForestGreen),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.5f))
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("📊", fontSize = 20.sp)
-                                Text(
-                                    text = "Satış Dashboard & Raporlar",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = WarmGold
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("📊", fontSize = 20.sp)
                             Text(
-                                text = "Haftalık ciro, adet bazlı ürün satışları, manuel kasa satışı ve sipariş geçmişi analizi.",
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.9f),
-                                lineHeight = 16.sp
+                                text = "Satış Dashboard & Raporlar",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = WarmGold
                             )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Surface(
-                            color = WarmGold,
-                            shape = CircleShape,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = "Aç",
-                                    tint = ForestGreen,
-                                    modifier = Modifier.size(22.dp)
-                                )
+                            Surface(
+                                color = WarmGold.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.Lock, contentDescription = null, tint = WarmGold, modifier = Modifier.size(11.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("PIN Korumalı", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                }
                             }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Haftalık ciro, adet bazlı ürün satışları, manuel kasa satışı ve sipariş geçmişi analizi.",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.9f),
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Surface(
+                        color = WarmGold,
+                        shape = CircleShape,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "PIN ile Aç",
+                                tint = ForestGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -892,13 +830,17 @@ fun SettingsScreen(
         }
     }
 
-    // --- PIN DOĞRULAMA DİYALOĞU ---
-    if (showPinDialogToSwitchMode) {
+    // --- PIN DOĞRULAMA DİYALOĞU (DASHBOARD GİRİŞİ) ---
+    if (showPinDialogForDashboard) {
         PinVerificationDialog(
-            onDismiss = { showPinDialogToSwitchMode = false },
+            onDismiss = { showPinDialogForDashboard = false },
             onPinSuccess = {
-                viewModel.setStaffMode(false)
-                showPinDialogToSwitchMode = false
+                showPinDialogForDashboard = false
+                onNavigateToDashboard()
+            },
+            onChangePinClick = {
+                showPinDialogForDashboard = false
+                showChangePinDialog = true
             },
             onVerify = { inputPin -> viewModel.verifyManagerPin(inputPin) }
         )
@@ -917,6 +859,7 @@ fun SettingsScreen(
 fun PinVerificationDialog(
     onDismiss: () -> Unit,
     onPinSuccess: () -> Unit,
+    onChangePinClick: () -> Unit,
     onVerify: (String) -> Boolean
 ) {
     var pinText by remember { mutableStateOf("") }
@@ -927,13 +870,13 @@ fun PinVerificationDialog(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Lock, contentDescription = null, tint = WarmGold)
-                Text("Yönetici PIN Doğrulama", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
+                Text("Kasa & Raporlar PIN Doğrulama", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
             }
         },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Yönetici moduna geçmek ve Kasa / Dashboard'u açmak için 4 haneli PIN kodunuzu giriniz.",
+                    text = "Kasa ve Finansal Dashboard'a erişmek için 4 haneli Yönetici PIN kodunuzu giriniz.",
                     fontSize = 13.sp,
                     color = SageGreen,
                     lineHeight = 18.sp
@@ -960,7 +903,17 @@ fun PinVerificationDialog(
 
                 if (hasError) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("❌ Hatalı PIN kodu! Lütfen tekrar deneyin.", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("❌ Hatalı PIN kodu! (Varsayılan: 1923)", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(
+                    onClick = onChangePinClick,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.Key, contentDescription = null, tint = SageGreen, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("PIN Kodunu Değiştir 🔐", fontSize = 12.sp, color = SageGreen, fontWeight = FontWeight.SemiBold)
                 }
             }
         },
@@ -977,7 +930,7 @@ fun PinVerificationDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Doğrula & Aç ✨", color = WarmGold, fontWeight = FontWeight.Bold)
+                Text("Dashboard'u Aç ✨", color = WarmGold, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

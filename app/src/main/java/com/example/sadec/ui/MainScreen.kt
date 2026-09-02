@@ -46,7 +46,6 @@ fun MainScreen(
     val restaurant by viewModel.restaurant.collectAsState()
     val pendingCount = orders.count { !it.isArchived && it.status == "pending" }
     val isWeeklyLockActive by viewModel.isWeeklyLockActive.collectAsState()
-    val isStaffMode by viewModel.isStaffMode.collectAsState()
     var hasDownloadedWeeklyExcel by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -226,21 +225,17 @@ fun MainScreen(
                     )
                 }
                 is Screen.Dashboard -> {
-                    if (isStaffMode) {
-                        currentScreen = Screen.Settings
-                    } else {
-                        DashboardScreen(
-                            viewModel = viewModel,
-                            onBack = { currentScreen = Screen.Settings }
-                        )
-                    }
+                    DashboardScreen(
+                        viewModel = viewModel,
+                        onBack = { currentScreen = Screen.Settings }
+                    )
                 }
             }
         }
     }
 
-    // Sunday Midnight / New Week Mandatory Unbypassable Lock Dialog (Sadece Yönetici Modunda Çalışır)
-    if (isWeeklyLockActive && !isStaffMode) {
+    // Sunday Midnight / New Week Mandatory Unbypassable Lock Dialog
+    if (isWeeklyLockActive) {
         val cal = Calendar.getInstance()
         val currentWeekPeriod = "${cal.get(Calendar.YEAR)}-Hafta${cal.get(Calendar.WEEK_OF_YEAR)}"
         val unarchivedOrders = orders.filter { !it.isArchived }

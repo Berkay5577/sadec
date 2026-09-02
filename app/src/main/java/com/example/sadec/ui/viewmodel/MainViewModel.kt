@@ -59,10 +59,6 @@ class MainViewModel @JvmOverloads constructor(
     private val _isWakeScreenEnabled = MutableStateFlow(NotificationPreferences.isWakeScreenEnabled(application))
     val isWakeScreenEnabled: StateFlow<Boolean> = _isWakeScreenEnabled.asStateFlow()
 
-    // Cihaz Yetki Modu (Garson / Çalışan Modu vs. Yönetici Modu)
-    private val _isStaffMode = MutableStateFlow(NotificationPreferences.isStaffMode(application))
-    val isStaffMode: StateFlow<Boolean> = _isStaffMode.asStateFlow()
-
     // Uygulama İçi Otomatik Güncelleme (In-App OTA Updater)
     private val _isDownloadingUpdate = MutableStateFlow(false)
     val isDownloadingUpdate: StateFlow<Boolean> = _isDownloadingUpdate.asStateFlow()
@@ -757,19 +753,7 @@ class MainViewModel @JvmOverloads constructor(
         _isWakeScreenEnabled.value = enabled
     }
 
-    // --- CİHAZ YETKİ VE PIN YÖNETİMİ ---
-    fun setStaffMode(enabled: Boolean) {
-        NotificationPreferences.setStaffMode(getApplication(), enabled)
-        _isStaffMode.value = enabled
-        viewModelScope.launch {
-            if (enabled) {
-                _uiMessage.emit("Cihaz 'Garson / Çalışan Modu'na alındı. Kasa & Dashboard gizlendi ☕")
-            } else {
-                _uiMessage.emit("Cihaz 'Yönetici Modu'na alındı. Tüm yetkiler aktif 👑")
-            }
-        }
-    }
-
+    // --- YÖNETİCİ PIN KODU DOĞRULAMA & GÜNCELLEME ---
     fun verifyManagerPin(inputPin: String): Boolean {
         val currentPin = _restaurant.value?.managerPin?.trim()?.ifBlank { "1923" } ?: "1923"
         return inputPin.trim() == currentPin
