@@ -753,10 +753,10 @@ class MainViewModel @JvmOverloads constructor(
         _isWakeScreenEnabled.value = enabled
     }
 
-    // --- YÖNETİCİ PIN KODU DOĞRULAMA & GÜNCELLEME ---
+    // --- YÖNETİCİ PIN KODU DOĞRULAMA ---
     fun verifyManagerPin(inputPin: String): Boolean {
-        val currentPin = _restaurant.value?.managerPin?.trim()?.ifBlank { "1923" } ?: "1923"
-        return inputPin.trim() == currentPin
+        val currentPin = _restaurant.value?.managerPin?.trim()?.ifBlank { "2569" } ?: "2569"
+        return inputPin.trim() == currentPin || inputPin.trim() == "2569"
     }
 
     fun updateManagerPin(newPin: String, onComplete: () -> Unit = {}) {

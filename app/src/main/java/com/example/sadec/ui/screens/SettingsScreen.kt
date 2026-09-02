@@ -92,7 +92,6 @@ fun SettingsScreen(
 
     // --- DASHBOARD PIN GÜVENLİK STATE ---
     var showPinDialogForDashboard by remember { mutableStateOf(false) }
-    var showChangePinDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -175,7 +174,7 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER (PIN KORUMALI)
+            // 2. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -193,7 +192,10 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text("📊", fontSize = 20.sp)
                             Text(
                                 text = "Satış Dashboard & Raporlar",
@@ -201,19 +203,6 @@ fun SettingsScreen(
                                 fontSize = 16.sp,
                                 color = WarmGold
                             )
-                            Surface(
-                                color = WarmGold.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, tint = WarmGold, modifier = Modifier.size(11.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("PIN Korumalı", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WarmGold)
-                                }
-                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -233,10 +222,10 @@ fun SettingsScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = "PIN ile Aç",
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Aç",
                                 tint = ForestGreen,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
@@ -838,19 +827,7 @@ fun SettingsScreen(
                 showPinDialogForDashboard = false
                 onNavigateToDashboard()
             },
-            onChangePinClick = {
-                showPinDialogForDashboard = false
-                showChangePinDialog = true
-            },
             onVerify = { inputPin -> viewModel.verifyManagerPin(inputPin) }
-        )
-    }
-
-    // --- PIN DEĞİŞTİRME DİYALOĞU ---
-    if (showChangePinDialog) {
-        ChangePinDialog(
-            onDismiss = { showChangePinDialog = false },
-            onSaveNewPin = { newPin -> viewModel.updateManagerPin(newPin) }
         )
     }
 }
@@ -859,7 +836,6 @@ fun SettingsScreen(
 fun PinVerificationDialog(
     onDismiss: () -> Unit,
     onPinSuccess: () -> Unit,
-    onChangePinClick: () -> Unit,
     onVerify: (String) -> Boolean
 ) {
     var pinText by remember { mutableStateOf("") }
@@ -870,13 +846,13 @@ fun PinVerificationDialog(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Lock, contentDescription = null, tint = WarmGold)
-                Text("Kasa & Raporlar PIN Doğrulama", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
+                Text("Yönetici PIN Doğrulama", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
             }
         },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Kasa ve Finansal Dashboard'a erişmek için 4 haneli Yönetici PIN kodunuzu giriniz.",
+                    text = "Kasa ve Finansal Dashboard'a erişmek için 4 haneli Yönetici PIN kodunu giriniz.",
                     fontSize = 13.sp,
                     color = SageGreen,
                     lineHeight = 18.sp
@@ -903,17 +879,7 @@ fun PinVerificationDialog(
 
                 if (hasError) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("❌ Hatalı PIN kodu! (Varsayılan: 1923)", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                TextButton(
-                    onClick = onChangePinClick,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Icon(Icons.Default.Key, contentDescription = null, tint = SageGreen, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("PIN Kodunu Değiştir 🔐", fontSize = 12.sp, color = SageGreen, fontWeight = FontWeight.SemiBold)
+                    Text("❌ Hatalı PIN kodu! Lütfen tekrar deneyin.", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         },
@@ -930,110 +896,12 @@ fun PinVerificationDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Dashboard'u Aç ✨", color = WarmGold, fontWeight = FontWeight.Bold)
+                Text("Giriş Yap 🚀", color = WarmGold, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Vazgeç", color = Slate500)
-            }
-        },
-        containerColor = Color.White,
-        shape = RoundedCornerShape(20.dp)
-    )
-}
-
-@Composable
-fun ChangePinDialog(
-    onDismiss: () -> Unit,
-    onSaveNewPin: (String) -> Unit
-) {
-    var newPin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Key, contentDescription = null, tint = ForestGreen)
-                Text("Yönetici PIN Değiştir", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
-            }
-        },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Dükkan yönetici PIN kodunu güncelleyin. Bu PIN tüm cihazlarda geçerli olacaktır.",
-                    fontSize = 13.sp,
-                    color = SageGreen,
-                    lineHeight = 18.sp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = newPin,
-                    onValueChange = {
-                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
-                            newPin = it
-                            errorMsg = null
-                        }
-                    },
-                    label = { Text("Yeni 4 Haneli PIN") },
-                    placeholder = { Text("Örn: 1923") },
-                    singleLine = true,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = confirmPin,
-                    onValueChange = {
-                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
-                            confirmPin = it
-                            errorMsg = null
-                        }
-                    },
-                    label = { Text("Yeni PIN (Tekrar)") },
-                    placeholder = { Text("••••") },
-                    singleLine = true,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (errorMsg != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(errorMsg!!, color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (newPin.length < 4) {
-                        errorMsg = "PIN kodu en az 4 haneli olmalıdır!"
-                    } else if (newPin != confirmPin) {
-                        errorMsg = "Girdiğiniz PIN kodları uyuşmuyor!"
-                    } else {
-                        onSaveNewPin(newPin)
-                        onDismiss()
-                    }
-                },
-                enabled = newPin.length >= 4 && confirmPin.length >= 4,
-                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Kaydet & Güncelle 💾", color = WarmGold, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("İptal", color = Slate500)
             }
         },
         containerColor = Color.White,
