@@ -90,6 +90,11 @@ fun SettingsScreen(
         }
     }
 
+    // --- CİHAZ YETKİ & PIN STATE ---
+    val isStaffMode by viewModel.isStaffMode.collectAsState()
+    var showPinDialogToSwitchMode by remember { mutableStateOf(false) }
+    var showChangePinDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -171,56 +176,130 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER
+            // 2. 🛡️ CİHAZ YETKİ & KULLANICI MODU KARTI (YÖNETİCİ / GARSON)
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToDashboard() },
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = ForestGreen),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.5f))
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isStaffMode) SoftMintGreen else ForestGreen
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                border = BorderStroke(1.5.dp, if (isStaffMode) SageGreen.copy(alpha = 0.6f) else WarmGold.copy(alpha = 0.6f))
             ) {
-                Row(
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+                            Text(if (isStaffMode) "☕" else "👑", fontSize = 24.sp)
+                            Column {
+                                Text(
+                                    text = if (isStaffMode) "Garson / Çalışan Modu" else "Yönetici / Patron Modu",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (isStaffMode) ForestGreen else WarmGold
+                                )
+                                Text(
+                                    text = if (isStaffMode) "Kasa & Ciro Dashboard gizli 🔒" else "Tüm Kasa & Rapor yetkileri açık ✨",
+                                    fontSize = 11.sp,
+                                    color = if (isStaffMode) ForestGreen.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+
+                        if (isStaffMode) {
+                            Button(
+                                onClick = { showPinDialogToSwitchMode = true },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.LockOpen, contentDescription = null, tint = WarmGold, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Yöneticiye Geç", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(
+                                    onClick = { showChangePinDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = WarmGold),
+                                    border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.6f)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Pin, contentDescription = null, tint = WarmGold, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("PIN Değiştir", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WarmGold)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.setStaffMode(true) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = WarmGold),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text("☕ Garson Modu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. 📊 SATIŞ DASHBOARD & RAPORLARI BANNER (SADECE YÖNETİCİ MODUNDA GÖZÜKÜR)
+            if (!isStaffMode) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable { onNavigateToDashboard() },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = ForestGreen),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    border = BorderStroke(1.dp, WarmGold.copy(alpha = 0.5f))
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("📊", fontSize = 20.sp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("📊", fontSize = 20.sp)
+                                Text(
+                                    text = "Satış Dashboard & Raporlar",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = WarmGold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Satış Dashboard & Raporlar",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = WarmGold
+                                text = "Haftalık ciro, adet bazlı ürün satışları, manuel kasa satışı ve sipariş geçmişi analizi.",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f),
+                                lineHeight = 16.sp
                             )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Haftalık ciro, adet bazlı ürün satışları, manuel kasa satışı ve sipariş geçmişi analizi.",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.9f),
-                            lineHeight = 16.sp
-                        )
-                    }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    Surface(
-                        color = WarmGold,
-                        shape = CircleShape,
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Aç",
-                                tint = ForestGreen,
-                                modifier = Modifier.size(22.dp)
-                            )
+                        Surface(
+                            color = WarmGold,
+                            shape = CircleShape,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Aç",
+                                    tint = ForestGreen,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -812,4 +891,199 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
+
+    // --- PIN DOĞRULAMA DİYALOĞU ---
+    if (showPinDialogToSwitchMode) {
+        PinVerificationDialog(
+            onDismiss = { showPinDialogToSwitchMode = false },
+            onPinSuccess = {
+                viewModel.setStaffMode(false)
+                showPinDialogToSwitchMode = false
+            },
+            onVerify = { inputPin -> viewModel.verifyManagerPin(inputPin) }
+        )
+    }
+
+    // --- PIN DEĞİŞTİRME DİYALOĞU ---
+    if (showChangePinDialog) {
+        ChangePinDialog(
+            onDismiss = { showChangePinDialog = false },
+            onSaveNewPin = { newPin -> viewModel.updateManagerPin(newPin) }
+        )
+    }
+}
+
+@Composable
+fun PinVerificationDialog(
+    onDismiss: () -> Unit,
+    onPinSuccess: () -> Unit,
+    onVerify: (String) -> Boolean
+) {
+    var pinText by remember { mutableStateOf("") }
+    var hasError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = WarmGold)
+                Text("Yönetici PIN Doğrulama", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
+            }
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Yönetici moduna geçmek ve Kasa / Dashboard'u açmak için 4 haneli PIN kodunuzu giriniz.",
+                    fontSize = 13.sp,
+                    color = SageGreen,
+                    lineHeight = 18.sp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = pinText,
+                    onValueChange = {
+                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                            pinText = it
+                            hasError = false
+                        }
+                    },
+                    label = { Text("4 Haneli PIN Kodu") },
+                    placeholder = { Text("••••") },
+                    singleLine = true,
+                    isError = hasError,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (hasError) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("❌ Hatalı PIN kodu! Lütfen tekrar deneyin.", color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (onVerify(pinText)) {
+                        onPinSuccess()
+                    } else {
+                        hasError = true
+                    }
+                },
+                enabled = pinText.length >= 4,
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Doğrula & Aç ✨", color = WarmGold, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Vazgeç", color = Slate500)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+fun ChangePinDialog(
+    onDismiss: () -> Unit,
+    onSaveNewPin: (String) -> Unit
+) {
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Key, contentDescription = null, tint = ForestGreen)
+                Text("Yönetici PIN Değiştir", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = ForestGreen)
+            }
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Dükkan yönetici PIN kodunu güncelleyin. Bu PIN tüm cihazlarda geçerli olacaktır.",
+                    fontSize = 13.sp,
+                    color = SageGreen,
+                    lineHeight = 18.sp
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = newPin,
+                    onValueChange = {
+                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                            newPin = it
+                            errorMsg = null
+                        }
+                    },
+                    label = { Text("Yeni 4 Haneli PIN") },
+                    placeholder = { Text("Örn: 1923") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = confirmPin,
+                    onValueChange = {
+                        if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                            confirmPin = it
+                            errorMsg = null
+                        }
+                    },
+                    label = { Text("Yeni PIN (Tekrar)") },
+                    placeholder = { Text("••••") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (errorMsg != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(errorMsg!!, color = DangerRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (newPin.length < 4) {
+                        errorMsg = "PIN kodu en az 4 haneli olmalıdır!"
+                    } else if (newPin != confirmPin) {
+                        errorMsg = "Girdiğiniz PIN kodları uyuşmuyor!"
+                    } else {
+                        onSaveNewPin(newPin)
+                        onDismiss()
+                    }
+                },
+                enabled = newPin.length >= 4 && confirmPin.length >= 4,
+                colors = ButtonDefaults.buttonColors(containerColor = ForestGreen),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Kaydet & Güncelle 💾", color = WarmGold, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("İptal", color = Slate500)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(20.dp)
+    )
 }

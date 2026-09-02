@@ -59,6 +59,10 @@ class MainViewModel @JvmOverloads constructor(
     private val _isWakeScreenEnabled = MutableStateFlow(NotificationPreferences.isWakeScreenEnabled(application))
     val isWakeScreenEnabled: StateFlow<Boolean> = _isWakeScreenEnabled.asStateFlow()
 
+    // Cihaz Yetki Modu (Garson / Çalışan Modu vs. Yönetici Modu)
+    private val _isStaffMode = MutableStateFlow(NotificationPreferences.isStaffMode(application))
+    val isStaffMode: StateFlow<Boolean> = _isStaffMode.asStateFlow()
+
     // Uygulama İçi Otomatik Güncelleme (In-App OTA Updater)
     private val _isDownloadingUpdate = MutableStateFlow(false)
     val isDownloadingUpdate: StateFlow<Boolean> = _isDownloadingUpdate.asStateFlow()
@@ -751,6 +755,40 @@ class MainViewModel @JvmOverloads constructor(
     fun setWakeScreenEnabled(enabled: Boolean) {
         NotificationPreferences.setWakeScreenEnabled(getApplication(), enabled)
         _isWakeScreenEnabled.value = enabled
+    }
+
+    // --- CİHAZ YETKİ VE PIN YÖNETİMİ ---
+    fun setStaffMode(enabled: Boolean) {
+        NotificationPreferences.setStaffMode(getApplication(), enabled)
+        _isStaffMode.value = enabled
+        viewModelScope.launch {
+            if (enabled) {
+                _uiMessage.emit("Cihaz 'Garson / Çalışan Modu'na alındı. Kasa & Dashboard gizlendi ☕")
+            } else {
+                _uiMessage.emit("Cihaz 'Yönetici Modu'na alındı. Tüm yetkiler aktif 👑")
+            }
+        }
+    }
+
+    fun verifyManagerPin(inputPin: String): Boolean {
+        val currentPin = _restaurant.value?.managerPin?.trim()?.ifBlank { "1923" } ?: "1923"
+        return inputPin.trim() == currentPin
+    }
+
+    fun updateManagerPin(newPin: String, onComplete: () -> Unit = {}) {
+        if (newPin.trim().length < 4) {
+            viewModelScope.launch { _uiMessage.emit("PIN kodu en az 4 haneli olmalıdır!") }
+            return
+        }
+        viewModelScope.launch {
+            val res = firestoreRepository.updateManagerPin(_restaurantId.value, newPin.trim())
+            res.onSuccess {
+                _uiMessage.emit("Yönetici PIN kodu başarıyla güncellendi 🔐")
+                onComplete()
+            }.onFailure {
+                _uiMessage.emit("PIN güncellenemedi: ${it.localizedMessage}")
+            }
+        }
     }
 
     // --- UYGULAMA İÇİ GÜNCELLEME (IN-APP OTA UPDATER) ---

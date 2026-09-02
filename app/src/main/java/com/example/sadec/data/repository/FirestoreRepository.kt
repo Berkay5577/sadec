@@ -67,6 +67,15 @@ class FirestoreRepository {
         }
     }
 
+    suspend fun updateManagerPin(restaurantId: String, newPin: String): Result<Unit> {
+        return try {
+            db.collection("restaurants").document(restaurantId).update("managerPin", newPin.trim()).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // -------------------------------------------------------------
     // ORDERS (Real-time Flow)
     // -------------------------------------------------------------

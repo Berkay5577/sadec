@@ -20,6 +20,7 @@ data class Restaurant(
     val enforceGeoFence: Boolean = false,
     val popupCampaign: PopupCampaign? = null,
     val appUpdateInfo: AppUpdateInfo? = null,
+    val managerPin: String = "1923", // Yönetici Dashboard & Finans PIN Kodu
     val createdAt: Long = System.currentTimeMillis()
 )
 

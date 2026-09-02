@@ -64,4 +64,19 @@ object NotificationPreferences {
     fun setPermissionAsked(context: Context, asked: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_PERMISSION_ASKED, asked).apply()
     }
+
+    /**
+     * Bu cihazın Garson / Çalışan modunda olup olmadığını döndürür.
+     * Garson modunda ciro ve kasa dashboard'u gizlenir.
+     * Varsayılan olarak Yönetici Modu (false) gelir.
+     */
+    fun isStaffMode(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_STAFF_MODE, false)
+    }
+
+    fun setStaffMode(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STAFF_MODE, enabled).apply()
+    }
+
+    private const val KEY_STAFF_MODE = "key_staff_mode"
 }
