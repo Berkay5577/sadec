@@ -1,19 +1,26 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 
-admin.initializeApp();
+initializeApp();
 
 /**
  * Yeni sipariş oluşturulduğunda TÜM kayıtlı cihazlara push bildirim gönder.
- * - Android: staff koleksiyonundaki fcmToken
- * - Web/iPhone PWA: pushTokens koleksiyonundaki token
+ * Region: europe-west1 (Firestore eur3 ile aynı bölge)
  */
-exports.onNewOrderCreated = functions.firestore
-  .document("restaurants/{restId}/orders/{orderId}")
-  .onCreate(async (snap, context) => {
+exports.onNewOrderCreated = onDocumentCreated(
+  {
+    document: "restaurants/{restId}/orders/{orderId}",
+    region: "europe-west1"
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+
     const order = snap.data();
-    const restId = context.params.restId;
-    const orderId = context.params.orderId;
+    const restId = event.params.restId;
+    const orderId = event.params.orderId;
 
     if (!order) {
       console.log("No order data found");
@@ -29,10 +36,11 @@ exports.onNewOrderCreated = functions.firestore
     console.log(`New Order: Restaurant=${restId}, Table=${tableLabel}, OrderId=${orderId}`);
 
     try {
+      const db = getFirestore();
       const tokens = [];
 
       // 1. Android tokens from staff collection
-      const staffSnapshot = await admin.firestore()
+      const staffSnapshot = await db
         .collection("staff")
         .where("restaurantId", "==", restId)
         .get();
@@ -42,7 +50,6 @@ exports.onNewOrderCreated = functions.firestore
         if (staffData.fcmToken && typeof staffData.fcmToken === "string") {
           tokens.push(staffData.fcmToken);
         }
-        // Multiple tokens per staff
         if (Array.isArray(staffData.fcmTokens)) {
           staffData.fcmTokens.forEach(t => {
             if (t && typeof t === "string") tokens.push(t);
@@ -51,7 +58,7 @@ exports.onNewOrderCreated = functions.firestore
       });
 
       // 2. Web push tokens (iPhone PWA + desktop browsers)
-      const webTokensSnapshot = await admin.firestore()
+      const webTokensSnapshot = await db
         .collection(`restaurants/${restId}/pushTokens`)
         .get();
 
@@ -72,6 +79,7 @@ exports.onNewOrderCreated = functions.firestore
 
       console.log(`Sending to ${uniqueTokens.length} devices`);
 
+      const messaging = getMessaging();
       const payload = {
         tokens: uniqueTokens,
         notification: {
@@ -84,8 +92,7 @@ exports.onNewOrderCreated = functions.firestore
           orderId: String(orderId),
           restaurantId: String(restId),
           tableLabel: String(tableLabel),
-          type: "new_order",
-          click_action: "FLUTTER_NOTIFICATION_CLICK"
+          type: "new_order"
         },
         android: {
           priority: "high",
@@ -103,10 +110,7 @@ exports.onNewOrderCreated = functions.firestore
             icon: "/logo.png",
             badge: "/logo.png",
             vibrate: [200, 100, 200, 100, 200],
-            requireInteraction: true,
-            actions: [
-              { action: "view", title: "Görüntüle" }
-            ]
+            requireInteraction: true
           },
           fcmOptions: {
             link: "/admin"
@@ -114,8 +118,8 @@ exports.onNewOrderCreated = functions.firestore
         }
       };
 
-      const response = await admin.messaging().sendEachForMulticast(payload);
-      console.log(`FCM result: ${response.successCount} success, ${response.failureCount} failed`);
+      const response = await messaging.sendEachForMulticast(payload);
+      console.log(`FCM: ${response.successCount} success, ${response.failureCount} failed`);
 
       // Clean up invalid tokens
       if (response.failureCount > 0) {
@@ -128,16 +132,15 @@ exports.onNewOrderCreated = functions.firestore
           }
         });
 
-        // Remove invalid web tokens from Firestore
         if (invalidTokens.length > 0) {
-          const batch = admin.firestore().batch();
-          const webTokensDocs = await admin.firestore()
+          const batch = db.batch();
+          const webTokensDocs = await db
             .collection(`restaurants/${restId}/pushTokens`)
             .where("token", "in", invalidTokens.slice(0, 10))
             .get();
           webTokensDocs.forEach(doc => batch.delete(doc.ref));
           await batch.commit();
-          console.log(`Cleaned ${webTokensDocs.size} invalid web tokens`);
+          console.log(`Cleaned ${webTokensDocs.size} invalid tokens`);
         }
       }
 
@@ -146,4 +149,5 @@ exports.onNewOrderCreated = functions.firestore
       console.error("Error sending notification:", error);
       return null;
     }
-  });
+  }
+);

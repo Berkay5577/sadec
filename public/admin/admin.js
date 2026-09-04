@@ -477,18 +477,13 @@
       messaging.useServiceWorker(registration);
 
       // VAPID key ile token al
-      const vapidKey = localStorage.getItem('sadec_vapid_key');
+      const vapidKey = 'BGxb-0sivHVZvdgnK7w2Wi_4GGKX4o3klBr2ZfpirWyHy5yy4XoBA5SP3imvgCQwPey3sW7OGB40iCV6bNYEQ6s';
       let token;
-      if (vapidKey) {
+      try {
         token = await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
-      } else {
-        // VAPID key henüz ayarlanmadıysa, default ile dene
-        try {
-          token = await messaging.getToken({ serviceWorkerRegistration: registration });
-        } catch (e) {
-          console.log('VAPID key gerekiyor. Ayarlar > Push Bildirim bölümünden VAPID key girin.');
-          return;
-        }
+      } catch (e) {
+        console.error('FCM token alma hatası:', e);
+        return;
       }
 
       if (!token) {
