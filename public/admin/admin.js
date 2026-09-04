@@ -274,15 +274,13 @@
       }
     });
 
-    // Update Pages
+    // Update Pages - only use 'active' class (CSS: .page-content { display: none } .page-content.active { display: block })
     document.querySelectorAll('.page-content').forEach(p => {
       p.classList.remove('active');
-      p.classList.add('hidden');
     });
     
     const target = document.getElementById(`page-${page}`);
     if (target) {
-        target.classList.remove('hidden');
         target.classList.add('active');
     }
 
@@ -323,8 +321,8 @@
       
       // Client-side sort by createdAt descending
       newOrders.sort((a, b) => {
-        const tA = a.createdAt ? a.createdAt.toMillis() : 0;
-        const tB = b.createdAt ? b.createdAt.toMillis() : 0;
+        const tA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
+        const tB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
         return tB - tA;
       });
       
@@ -347,7 +345,7 @@
     unsubscribeTables = db.collection(`${BASE_PATH}/tables`).onSnapshot(snap => {
       allTables = [];
       snap.forEach(doc => allTables.push({ id: doc.id, ...doc.data() }));
-      allTables.sort((a, b) => a.label.localeCompare(b.label));
+      allTables.sort((a, b) => (a.label || '').localeCompare(b.label || ''));
       if (currentPage === 'tables') renderTables();
     });
 
