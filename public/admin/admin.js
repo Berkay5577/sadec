@@ -533,6 +533,63 @@
     }
   }
 
+  window.testPushNotifications = async function() {
+    const debugText = document.getElementById('pushDebugText');
+    if (!debugText) return;
+    
+    try {
+      debugText.innerText = 'Durum: İzin isteniyor...';
+      
+      if (!('serviceWorker' in navigator)) {
+        debugText.innerText = 'Hata: Service Worker desteklenmiyor (iOS sürümünüzü güncelleyin).';
+        return;
+      }
+      
+      const registration = await navigator.serviceWorker.register('/admin/firebase-messaging-sw.js');
+      
+      let permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        debugText.innerText = 'Hata: Bildirim izni REDDEDİLDİ. Ayarlar > Safari > Bildirimler kısmını kontrol edin.';
+        return;
+      }
+      
+      debugText.innerText = 'Durum: Token alınıyor...';
+      const messaging = firebase.messaging();
+      messaging.useServiceWorker(registration);
+      
+      const vapidKey = 'BGxb-0sivHVZvdgnK7w2Wi_4GGKX4o3klBr2ZfpirWyHy5yy4XoBA5SP3imvgCQwPey3sW7OGB40iCV6bNYEQ6s';
+      const token = await messaging.getToken({ vapidKey, serviceWorkerRegistration: registration });
+      
+      if (!token) {
+        debugText.innerText = 'Hata: Token alınamadı.';
+        return;
+      }
+      
+      debugText.innerText = 'Durum: Kaydediliyor...\nToken: ' + token.substring(0, 15) + '...';
+      
+      await db.collection(`${BASE_PATH}/pushTokens`).doc(token.substring(0, 20)).set({
+        token: token,
+        createdAt: Date.now(),
+        platform: /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'ios-pwa-manual' : 'web-manual',
+        userAgent: navigator.userAgent.substring(0, 100)
+      }, { merge: true });
+      
+      debugText.innerText = 'Başarılı! Cihaz kaydedildi. \nToken: ' + token.substring(0, 20) + '...';
+      showToast('Bildirimler başarıyla aktif edildi!');
+      
+      // Test the local notification
+      new Notification("Test Bildirimi", {
+        body: "Eğer bu bildirimi görüyorsanız sistem çalışıyor demektir!",
+        icon: "/logo.png"
+      });
+      playNotificationSound();
+      
+    } catch (err) {
+      debugText.innerText = 'Hata: ' + err.message;
+      console.error(err);
+    }
+  };
+
   // === Module 6b: Orders ===
   function updateOrderBadges() {
     const active = allOrders.filter(o => !o.isArchived && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'));
