@@ -347,9 +347,8 @@
     
     function startOrdersListener() {
         const db = firebase.firestore();
+        // Tüm siparişleri çek, istemci tarafında filtrele/sırala (composite index gerektirmez)
         unsubscribeOrders = db.collection(`${BASE_PATH}/orders`)
-            .where('isArchived', '==', false)
-            .orderBy('createdAt', 'desc')
             .onSnapshot(snapshot => {
                 allOrders = [];
                 let newPendingCount = 0;
@@ -357,11 +356,20 @@
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     data.id = doc.id;
-                    allOrders.push(data);
+                    if (!data.isArchived) {
+                        allOrders.push(data);
+                    }
                     
-                    if (data.status === 'pending') {
+                    if (data.status === 'pending' && !data.isArchived) {
                         newPendingCount++;
                     }
+                });
+                
+                // İstemci tarafında sıralama (en yeni üstte)
+                allOrders.sort((a, b) => {
+                    const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
+                    const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
+                    return timeB - timeA;
                 });
                 
                 if (newPendingCount > lastPendingCount) {
@@ -1283,24 +1291,31 @@
     
     async function loadDashboardData() {
         const db = firebase.firestore();
-        let query = db.collection(`${BASE_PATH}/orders`);
-        
         let dashboardOrders = [];
         
         try {
+            // Tüm siparişleri çek, istemci tarafında filtrele (composite index gerektirmez)
+            const snapshot = await db.collection(`${BASE_PATH}/orders`).get();
+            const allDocs = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                data.id = doc.id;
+                allDocs.push(data);
+            });
+            
             if (dashboardFilter === 'today') {
-                const snapshot = await query.where('isArchived', '==', false).get();
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (!data.isDayClosed) dashboardOrders.push(data);
-                });
+                dashboardOrders = allDocs.filter(d => !d.isArchived && !d.isDayClosed);
             } else if (dashboardFilter === 'week') {
-                const snapshot = await query.where('isArchived', '==', false).get();
-                snapshot.forEach(doc => dashboardOrders.push(doc.data()));
+                dashboardOrders = allDocs.filter(d => !d.isArchived);
             } else if (dashboardFilter === 'past') {
-                const snapshot = await query.where('isArchived', '==', true)
-                                          .orderBy('createdAt', 'desc').limit(200).get();
-                snapshot.forEach(doc => dashboardOrders.push(doc.data()));
+                dashboardOrders = allDocs.filter(d => d.isArchived);
+                // En yeni üstte sırala
+                dashboardOrders.sort((a, b) => {
+                    const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
+                    const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
+                    return timeB - timeA;
+                });
+                dashboardOrders = dashboardOrders.slice(0, 200);
             }
             
             renderDashboardCards(dashboardOrders);
