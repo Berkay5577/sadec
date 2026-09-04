@@ -1,1661 +1,1384 @@
 (function() {
-    // ==========================================
-    // MODULE 1: Constants & State
-    // ==========================================
-    const RESTAURANT_ID = 'sadec-gerze';
-    const BASE_PATH = `restaurants/${RESTAURANT_ID}`;
+  // === Module 1: State ===
+  const RESTAURANT_ID = 'sadec-gerze';
+  const BASE_PATH = `restaurants/${RESTAURANT_ID}`;
+  let currentUser = null;
+  let currentPage = 'orders';
+  let ordersFilter = 'active';
+  let dashboardFilter = 'today';
+  let allOrders = [];
+  let allTables = [];
+  let allCategories = [];
+  let allMenuItems = [];
+  let restaurant = null;
+  let selectedTableItems = {};
+  let dashboardUnlocked = false;
+  let unsubscribeOrders = null;
+  let unsubscribeRestaurant = null;
+  let unsubscribeTables = null;
+  let unsubscribeCategories = null;
+  let unsubscribeMenuItems = null;
+  let audioContext = null;
+  let lastPendingCount = 0;
+
+  // === Module 2: Utilities ===
+  function formatPrice(num) {
+    if (!num) return '0,00 ₺';
+    return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+  }
+
+  function formatTime(timestamp) {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDate(timestamp) {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function statusText(status) {
+    const map = {
+      'pending': '⏳ Bekliyor',
+      'preparing': '🍳 Hazırlanıyor',
+      'ready': '🛎️ Hazır',
+      'delivered': '✅ Teslim Edildi',
+      'cancelled': '❌ İptal'
+    };
+    return map[status] || status;
+  }
+
+  function calcItemEffectivePrice(item) {
+    if (item.isComplimentary) return 0;
+    const base = (item.unitPrice || 0) * (item.quantity || 1);
+    const discount = item.discountAmount || 0;
+    return Math.max(0, base - discount);
+  }
+
+  function calcOrderTotal(order) {
+    if (!order || !order.items) return 0;
+    return order.items.reduce((sum, item) => sum + calcItemEffectivePrice(item), 0);
+  }
+
+  function calcOrderRemaining(order) {
+    if (!order || !order.items) return 0;
+    return order.items.reduce((sum, item) => {
+      if (item.isPaid || item.isComplimentary) return sum;
+      return sum + calcItemEffectivePrice(item);
+    }, 0);
+  }
+
+  function showModal(title, bodyHtml, footerHtml) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalFooter').innerHTML = footerHtml || '';
+    document.getElementById('modalOverlay').classList.remove('hidden');
+    document.getElementById('modalOverlay').classList.add('active');
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+    setTimeout(() => {
+      document.getElementById('modalOverlay').classList.add('hidden');
+    }, 200); // Wait for transition
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    toast.style.opacity = '1';
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.classList.add('hidden'), 300);
+    }, 3000);
+  }
+
+  function playNotificationSound() {
+    if (!audioContext) return;
+    try {
+      const osc = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+      osc.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.1);
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      osc.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      osc.start();
+      osc.stop(audioContext.currentTime + 0.5);
+    } catch (e) {
+      console.log('Audio notification failed:', e);
+    }
+  }
+
+  function initAudio() {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+  }
+
+  // === Module 3: Init & Event Listeners ===
+  document.addEventListener('DOMContentLoaded', () => {
+    // Auth Listener
+    auth.onAuthStateChanged(onAuthStateChanged);
+
+    // Login
+    document.getElementById('loginBtn').addEventListener('click', handleLogin);
     
-    let currentUser = null;
-    let currentPage = 'orders';
-    let ordersFilter = 'active';
-    let dashboardFilter = 'today';
+    // Passwords enter key
+    document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    document.getElementById('settingsLogoutBtn').addEventListener('click', handleLogout);
+
+    // Modal
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('modalOverlay').addEventListener('click', (e) => {
+      if (e.target.id === 'modalOverlay') closeModal();
+    });
+
+    // Dashboard PIN
+    document.getElementById('dashboardPinSubmit').addEventListener('click', checkDashboardPin);
+    document.getElementById('dashboardPinInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') checkDashboardPin();
+    });
+
+    // Manual Sale FAB
+    const fab = document.getElementById('manualSaleFab');
+    if (fab) fab.addEventListener('click', showManualSaleDialog);
+
+    // Navigation
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const page = e.currentTarget.getAttribute('data-page');
+        navigateTo(page);
+      });
+    });
+
+    // Order Filters
+    document.querySelectorAll('#page-orders .filter-chips .chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        document.querySelectorAll('#page-orders .chip').forEach(c => c.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        ordersFilter = e.currentTarget.getAttribute('data-filter');
+        renderOrders();
+      });
+    });
+
+    // Dashboard Filters
+    document.querySelectorAll('#page-dashboard .time-filter-chips .chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        document.querySelectorAll('#page-dashboard .time-filter-chips .chip').forEach(c => c.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        dashboardFilter = e.currentTarget.getAttribute('data-filter');
+        renderDashboardCards(allOrders); // re-render with new filter
+      });
+    });
+
+    // Audio init on first interaction
+    document.body.addEventListener('click', initAudio, { once: true });
+    document.body.addEventListener('touchstart', initAudio, { once: true });
     
-    let allOrders = [];
-    let allTables = [];
-    let allCategories = [];
-    let allMenuItems = [];
-    let restaurant = null;
+    // Add Menu Buttons
+    const addCategoryBtn = document.getElementById('addCategoryBtn');
+    if (addCategoryBtn) addCategoryBtn.addEventListener('click', showAddCategoryDialog);
     
-    let selectedTableItems = {};
-    let dashboardUnlocked = false;
+    const backToCategoriesBtn = document.getElementById('backToCategoriesBtn');
+    if (backToCategoriesBtn) backToCategoriesBtn.addEventListener('click', backToCategories);
     
-    let unsubscribeOrders = null;
-    let unsubscribeRestaurant = null;
-    let unsubscribeTables = null;
-    let unsubscribeCategories = null;
-    let unsubscribeMenuItems = null;
-    
-    let audioContext = null;
-    let manualSaleCart = [];
+    const addProductBtn = document.getElementById('addProductBtn');
+    if (addProductBtn) addProductBtn.addEventListener('click', () => {
+        const currentCatId = document.getElementById('categoryDetail').getAttribute('data-current-cat');
+        if (currentCatId) showAddProductDialog(currentCatId);
+    });
+  });
 
-    // ==========================================
-    // MODULE 10: Utilities
-    // ==========================================
-    function formatPrice(num) {
-        if (num === null || num === undefined) return '0,00';
-        return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // === Module 4: Auth ===
+  async function handleLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPassword').value.trim();
+    const errorEl = document.getElementById('loginError');
+    const spinner = document.getElementById('loginSpinner');
+    const btn = document.getElementById('loginBtn');
+
+    if (!email || !pass) {
+      errorEl.textContent = 'Lütfen e-posta ve şifrenizi girin.';
+      return;
     }
 
-    function formatTime(timestamp) {
-        if (!timestamp) return '';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-    }
+    errorEl.textContent = '';
+    btn.disabled = true;
+    spinner.style.display = 'block';
 
-    function formatDate(timestamp) {
-        if (!timestamp) return '';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-        return date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    }
-
-    function statusText(status) {
-        const statuses = {
-            'pending': 'Bekliyor 🕒',
-            'preparing': 'Hazırlanıyor 👨🍳',
-            'ready': 'Hazır ☕',
-            'delivered': 'Teslim Edildi ✅',
-            'cancelled': 'İptal Edildi ❌'
-        };
-        return statuses[status] || status;
-    }
-
-    function calcItemEffectivePrice(item) {
-        if (item.isComplimentary) return 0;
-        return Math.max(0, (item.unitPrice * item.quantity) - (item.discountAmount || 0));
-    }
-
-    function calcOrderTotal(order) {
-        if (!order.items) return 0;
-        return order.items.reduce((sum, item) => sum + calcItemEffectivePrice(item), 0);
-    }
-
-    function calcOrderRemaining(order) {
-        if (!order.items) return 0;
-        return order.items.reduce((sum, item) => {
-            if (item.isPaid || item.isComplimentary) return sum;
-            return sum + calcItemEffectivePrice(item);
-        }, 0);
-    }
-
-    function showModal(title, bodyHtml, footerHtml) {
-        const overlay = document.getElementById('modalOverlay');
-        const titleEl = document.getElementById('modalTitle');
-        const bodyEl = document.getElementById('modalBody');
-        const footerEl = document.getElementById('modalFooter');
-        
-        if(titleEl) titleEl.innerText = title;
-        if(bodyEl) bodyEl.innerHTML = bodyHtml;
-        if(footerEl) footerEl.innerHTML = footerHtml;
-        if(overlay) overlay.style.display = 'flex';
-    }
-
-    function closeModal() {
-        const overlay = document.getElementById('modalOverlay');
-        if(overlay) overlay.style.display = 'none';
-        const bodyEl = document.getElementById('modalBody');
-        const footerEl = document.getElementById('modalFooter');
-        if(bodyEl) bodyEl.innerHTML = '';
-        if(footerEl) footerEl.innerHTML = '';
-    }
-
-    function showToast(message) {
-        const toast = document.getElementById('toast');
-        if (!toast) return;
-        toast.innerText = message;
-        toast.classList.add('show');
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
-    }
-
-    function generateId() {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    }
-    
-    window.closeModal = closeModal;
-    
-    function playNotificationSound() {
+    try {
+      await auth.signInWithEmailAndPassword(email, pass);
+    } catch (err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
         try {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
-            
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.05);
-            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.2);
-        } catch (e) {
-            console.error('Audio playback failed', e);
+          await auth.createUserWithEmailAndPassword(email, pass);
+        } catch (createErr) {
+          errorEl.textContent = 'Giriş yapılamadı: ' + createErr.message;
         }
+      } else {
+        errorEl.textContent = 'Hata: ' + err.message;
+      }
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
     }
+  }
 
-    // ==========================================
-    // MODULE 2: Initialization
-    // ==========================================
-    function init() {
-        const auth = firebase.auth();
-        auth.onAuthStateChanged(onAuthStateChanged);
-        
-        document.getElementById('loginBtn')?.addEventListener('click', handleLogin);
-        document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
-        
-        document.getElementById('modalClose')?.addEventListener('click', closeModal);
-        document.getElementById('manualSaleFab')?.addEventListener('click', window.showManualSaleDialog);
-        
-        document.getElementById('dashboardPinSubmit')?.addEventListener('click', checkDashboardPin);
-        
-        document.body.addEventListener('click', () => {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }, { once: true });
-        
-        document.querySelectorAll('.bottom-nav .nav-item[data-page]').forEach(item => {
-            item.addEventListener('click', (e) => {
-                const page = e.currentTarget.getAttribute('data-page');
-                navigateTo(page);
-            });
-        });
-        
-        document.querySelectorAll('#page-orders .filter-chips .chip[data-filter]').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                document.querySelectorAll('#page-orders .filter-chips .chip').forEach(c => c.classList.remove('active'));
-                e.currentTarget.classList.add('active');
-                ordersFilter = e.currentTarget.getAttribute('data-filter');
-                renderOrders();
-            });
-        });
-        
-        document.querySelectorAll('#page-dashboard .time-filter-chips .chip[data-filter]').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                document.querySelectorAll('#page-dashboard .time-filter-chips .chip').forEach(c => c.classList.remove('active'));
-                e.currentTarget.classList.add('active');
-                dashboardFilter = e.currentTarget.getAttribute('data-filter');
-                loadDashboardData();
-            });
-        });
-    }
+  async function handleLogout() {
+    await auth.signOut();
+  }
 
-    // ==========================================
-    // MODULE 3: Auth
-    // ==========================================
-    async function handleLogin() {
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-        const errorEl = document.getElementById('loginError');
-        const loginBtn = document.getElementById('loginBtn');
-        
-        if (!email || !password) {
-            if (errorEl) errorEl.innerText = 'Lütfen email ve şifre giriniz.';
-            return;
-        }
-        
-        try {
-            if (loginBtn) {
-                loginBtn.disabled = true;
-                loginBtn.innerText = 'Giriş Yapılıyor...';
-            }
-            if (errorEl) errorEl.innerText = '';
-            
-            try {
-                await firebase.auth().signInWithEmailAndPassword(email, password);
-            } catch (signInErr) {
-                // Hesap yoksa otomatik oluştur (Android uygulamasıyla aynı mantık)
-                console.log('Sign-in failed, trying to create account...', signInErr.code);
-                try {
-                    await firebase.auth().createUserWithEmailAndPassword(email, password);
-                } catch (signUpErr) {
-                    // Her iki deneme de başarısız
-                    throw signInErr;
-                }
-            }
-        } catch (error) {
-            console.error('Login error', error);
-            let errorMsg = 'Giriş başarısız.';
-            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                errorMsg = 'E-posta veya şifre hatalı.';
-            } else if (error.code === 'auth/user-not-found') {
-                errorMsg = 'Kullanıcı bulunamadı.';
-            } else if (error.code === 'auth/too-many-requests') {
-                errorMsg = 'Çok fazla deneme. Lütfen biraz bekleyin.';
-            } else if (error.code === 'auth/network-request-failed') {
-                errorMsg = 'İnternet bağlantısını kontrol edin.';
-            }
-            if (errorEl) errorEl.innerText = errorMsg;
-            if (loginBtn) {
-                loginBtn.disabled = false;
-                loginBtn.innerText = 'Giriş Yap';
-            }
-        }
-    }
+  function onAuthStateChanged(user) {
+    currentUser = user;
+    const loginScreen = document.getElementById('loginScreen');
+    const appContainer = document.getElementById('appContainer');
 
-    async function handleLogout() {
-        try {
-            await firebase.auth().signOut();
-        } catch (error) {
-            console.error('Logout error', error);
-            showToast('Çıkış yapılamadı');
-        }
-    }
-
-    function onAuthStateChanged(user) {
-        const loginScreen = document.getElementById('loginScreen');
-        const appContainer = document.getElementById('appContainer');
-        const loginBtn = document.getElementById('loginBtn');
-        
-        if (user) {
-            currentUser = user;
-            if(loginScreen) loginScreen.classList.add('hidden');
-            if(appContainer) appContainer.classList.remove('hidden');
-            
-            startRestaurantListener();
-            startOrdersListener();
-            startTablesListener();
-            startMenuListeners();
-            
-            navigateTo('orders');
-        } else {
-            currentUser = null;
-            if(loginScreen) loginScreen.classList.remove('hidden');
-            if(appContainer) appContainer.classList.add('hidden');
-            if (loginBtn) {
-                loginBtn.disabled = false;
-                loginBtn.innerText = 'Giriş Yap';
-            }
-            
-            if (unsubscribeOrders) unsubscribeOrders();
-            if (unsubscribeRestaurant) unsubscribeRestaurant();
-            if (unsubscribeTables) unsubscribeTables();
-            if (unsubscribeCategories) unsubscribeCategories();
-            if (unsubscribeMenuItems) unsubscribeMenuItems();
-        }
-    }
-    
-    function startRestaurantListener() {
-        const db = firebase.firestore();
-        unsubscribeRestaurant = db.doc(BASE_PATH).onSnapshot(doc => {
-            if (doc.exists) {
-                restaurant = doc.data();
-            }
-        });
-    }
-
-    // ==========================================
-    // MODULE 4: Router
-    // ==========================================
-    function navigateTo(page) {
-        document.querySelectorAll('.page-content').forEach(el => el.style.display = 'none');
-        
-        const targetPage = document.getElementById(`page-${page}`);
-        if(targetPage) targetPage.style.display = 'block';
-        
-        document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
-            if (item.getAttribute('data-page') === page) {
-                item.classList.add('active');
-            } else {
-                item.classList.remove('active');
-            }
-        });
-        
-        currentPage = page;
-        
-        if (page === 'orders') {
-            renderOrders();
-        } else if (page === 'tables') {
-            renderTables();
-        } else if (page === 'menu') {
-            renderCategories();
-        } else if (page === 'dashboard') {
-            const gate = document.getElementById('dashboardPinGate');
-            const content = document.getElementById('dashboardContent');
-            const pinInput = document.getElementById('dashboardPinInput');
-            const error = document.getElementById('dashboardPinError');
-            
-            if (!dashboardUnlocked) {
-                if (gate) gate.style.display = 'flex';
-                if (content) content.style.display = 'none';
-                if (pinInput) pinInput.value = '';
-                if (error) error.innerText = '';
-            } else {
-                if (gate) gate.style.display = 'none';
-                if (content) content.style.display = 'block';
-                loadDashboardData();
-            }
-        } else if (page === 'settings') {
-            renderSettings();
-        }
-    }
-
-    // ==========================================
-    // MODULE 5: Orders
-    // ==========================================
-    let lastPendingCount = 0;
-    
-    function startOrdersListener() {
-        const db = firebase.firestore();
-        // Tüm siparişleri çek, istemci tarafında filtrele/sırala (composite index gerektirmez)
-        unsubscribeOrders = db.collection(`${BASE_PATH}/orders`)
-            .onSnapshot(snapshot => {
-                allOrders = [];
-                let newPendingCount = 0;
-                
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    data.id = doc.id;
-                    if (!data.isArchived) {
-                        allOrders.push(data);
-                    }
-                    
-                    if (data.status === 'pending' && !data.isArchived) {
-                        newPendingCount++;
-                    }
-                });
-                
-                // İstemci tarafında sıralama (en yeni üstte)
-                allOrders.sort((a, b) => {
-                    const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
-                    const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
-                    return timeB - timeA;
-                });
-                
-                if (newPendingCount > lastPendingCount) {
-                    playNotificationSound();
-                }
-                lastPendingCount = newPendingCount;
-                
-                if (currentPage === 'orders') renderOrders();
-                if (currentPage === 'tables') {
-                    computeActiveTables();
-                    renderTables();
-                }
-                if (currentPage === 'dashboard' && dashboardUnlocked && dashboardFilter === 'today') {
-                    loadDashboardData();
-                }
-                
-                updateOrderBadges();
-            }, error => {
-                console.error("Orders listener error:", error);
-            });
-    }
-    
-    function updateOrderBadges() {
-        const activeOrders = allOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
-        const activeCount = activeOrders.length;
-        
-        const badge1 = document.getElementById('ordersActiveBadge');
-        const badge2 = document.getElementById('navOrdersBadge');
-        
-        if(badge1) {
-            badge1.innerText = activeCount > 0 ? activeCount : '';
-            badge1.style.display = activeCount > 0 ? 'inline-block' : 'none';
-        }
-        if(badge2) {
-            badge2.innerText = activeCount > 0 ? activeCount : '';
-            badge2.style.display = activeCount > 0 ? 'inline-block' : 'none';
-        }
-    }
-
-    function renderOrderItems(items) {
-        if (!items) return '';
-        return items.map(item => `
-            <div class="order-item-row ${item.isPaid ? 'paid' : ''} ${item.isComplimentary ? 'complimentary' : ''}">
-                <div class="item-qty">${item.quantity}x</div>
-                <div class="item-name">${item.name}</div>
-                ${item.note ? `<div class="item-note">📝 ${item.note}</div>` : ''}
-                <div class="item-price">₺${formatPrice(calcItemEffectivePrice(item))}</div>
-            </div>
-        `).join('');
-    }
-
-    function renderOrders() {
-        const container = document.getElementById('ordersList');
-        const emptyState = document.getElementById('ordersEmpty');
-        if (!container || !emptyState) return;
-        
-        let filteredOrders = allOrders;
-        if (ordersFilter === 'active') {
-            filteredOrders = allOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
-        } else if (ordersFilter === 'delivered') {
-            filteredOrders = allOrders.filter(o => o.status === 'delivered');
-        } else if (ordersFilter === 'cancelled') {
-            filteredOrders = allOrders.filter(o => o.status === 'cancelled');
-        }
-        
-        if (filteredOrders.length === 0) {
-            container.innerHTML = '';
-            emptyState.style.display = 'flex';
-        } else {
-            emptyState.style.display = 'none';
-            container.innerHTML = filteredOrders.map(order => `
-                <div class="order-card card status-border-${order.status}" data-order-id="${order.id}">
-                    <div class="order-header flex-between mb-8">
-                        <div class="flex-col">
-                            <span class="font-bold text-lg">📍 ${order.tableLabel || 'Masa ?'}</span>
-                            <span class="text-gray text-sm">👤 ${order.customerName || 'Misafir'}</span>
-                        </div>
-                        <div class="flex-col text-right">
-                            <span class="text-gray text-sm">${formatTime(order.createdAt)}</span>
-                            <span class="badge status-${order.status}">${statusText(order.status)}</span>
-                        </div>
-                    </div>
-                    <div class="order-items mb-8">
-                        ${renderOrderItems(order.items)}
-                    </div>
-                    ${order.note ? `<div class="order-note bg-light-yellow p-4 rounded mb-8">📝 ${order.note}</div>` : ''}
-                    <div class="flex-between mb-8">
-                        <span class="font-bold text-lg">Toplam: ₺${formatPrice(calcOrderTotal(order))}</span>
-                    </div>
-                    ${order.status !== 'delivered' && order.status !== 'cancelled' ? `
-                        <div class="order-actions flex gap-8">
-                            <button class="btn btn-primary flex-1" onclick="window.deliverOrder('${order.id}')">Teslim Et ✅</button>
-                            <button class="btn btn-danger flex-1" onclick="window.showCancelDialog('${order.id}')">İptal ❌</button>
-                        </div>
-                    ` : ''}
-                    ${order.status === 'cancelled' && order.cancelReason ? `<div class="text-danger text-sm mt-8">❌ İptal Nedeni: ${order.cancelReason}</div>` : ''}
-                </div>
-            `).join('');
-        }
-    }
-
-    window.deliverOrder = async function(orderId) {
-        try {
-            const db = firebase.firestore();
-            await db.doc(`${BASE_PATH}/orders/${orderId}`).update({
-                status: 'delivered',
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            showToast('Sipariş teslim edildi.');
-        } catch(e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-
-    window.showCancelDialog = function(orderId) {
-        const bodyHtml = `
-            <div class="cancel-options flex-col gap-8">
-                <label class="radio-label"><input type="radio" name="cancelReason" value="Müşteri vazgeçti / ayrıldı" checked> Müşteri vazgeçti / ayrıldı</label>
-                <label class="radio-label"><input type="radio" name="cancelReason" value="Ürün tükendi / stok yetersiz"> Ürün tükendi / stok yetersiz</label>
-                <label class="radio-label"><input type="radio" name="cancelReason" value="Hatalı / Yanlış sipariş"> Hatalı / Yanlış sipariş</label>
-                <label class="radio-label"><input type="radio" name="cancelReason" value="Masa boşaldı / Yanlış masa"> Masa boşaldı / Yanlış masa</label>
-                <label class="radio-label">
-                    <input type="radio" name="cancelReason" value="Diğer" id="cancelReasonOtherRadio"> Diğer...
-                </label>
-                <input type="text" id="cancelReasonOtherText" class="input mt-4" placeholder="Nedeni yazın..." style="display:none;">
-            </div>
-        `;
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">Vazgeç</button>
-            <button class="btn btn-danger" onclick="window.cancelOrder('${orderId}')">İptal Et</button>
-        `;
-        
-        showModal('Siparişi İptal Et', bodyHtml, footerHtml);
-        
-        setTimeout(() => {
-            const radios = document.querySelectorAll('input[name="cancelReason"]');
-            const otherText = document.getElementById('cancelReasonOtherText');
-            if (otherText) {
-                radios.forEach(r => r.addEventListener('change', (e) => {
-                    if (e.target.id === 'cancelReasonOtherRadio') {
-                        otherText.style.display = 'block';
-                        otherText.focus();
-                    } else {
-                        otherText.style.display = 'none';
-                    }
-                }));
-            }
-        }, 100);
-    };
-
-    window.cancelOrder = async function(orderId) {
-        const checked = document.querySelector('input[name="cancelReason"]:checked');
-        let reason = checked ? checked.value : 'Diğer';
-        if (reason === 'Diğer') {
-            const otherEl = document.getElementById('cancelReasonOtherText');
-            reason = otherEl ? otherEl.value || 'Belirtilmedi' : 'Belirtilmedi';
-        }
-        
-        try {
-            const db = firebase.firestore();
-            await db.doc(`${BASE_PATH}/orders/${orderId}`).update({
-                status: 'cancelled',
-                cancelReason: reason,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            closeModal();
-            showToast('Sipariş iptal edildi.');
-        } catch(e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-
-    // ==========================================
-    // MODULE 6: Tables & POS
-    // ==========================================
-    let activeTablesData = [];
-    
-    function startTablesListener() {
-        const db = firebase.firestore();
-        unsubscribeTables = db.collection(`${BASE_PATH}/tables`).onSnapshot(snapshot => {
-            allTables = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                data.id = doc.id;
-                allTables.push(data);
-            });
-            computeActiveTables();
-            if (currentPage === 'tables') renderTables();
-        });
-    }
-
-    function computeActiveTables() {
-        activeTablesData = [];
-        let activeTableCount = 0;
-        
-        const tableOrders = {};
-        allOrders.forEach(order => {
-            if (order.status !== 'cancelled' && !order.isArchived) {
-                if (!tableOrders[order.tableId]) tableOrders[order.tableId] = [];
-                tableOrders[order.tableId].push(order);
-            }
-        });
-        
-        allTables.forEach(table => {
-            const orders = tableOrders[table.id] || [];
-            let remaining = 0;
-            orders.forEach(o => remaining += calcOrderRemaining(o));
-            
-            if (remaining > 0.001 || orders.length > 0) {
-                activeTablesData.push({
-                    table: table,
-                    orders: orders,
-                    remaining: remaining
-                });
-                if (remaining > 0.001) activeTableCount++;
-            }
-        });
-        
-        const adhocOrders = allOrders.filter(o => !allTables.find(t => t.id === o.tableId) && o.status !== 'cancelled' && !o.isArchived);
-        if (adhocOrders.length > 0) {
-            const adhocGroups = {};
-            adhocOrders.forEach(o => {
-                const label = o.tableLabel || 'Bilinmeyen';
-                if (!adhocGroups[label]) adhocGroups[label] = [];
-                adhocGroups[label].push(o);
-            });
-            
-            Object.keys(adhocGroups).forEach(label => {
-                const orders = adhocGroups[label];
-                let remaining = 0;
-                orders.forEach(o => remaining += calcOrderRemaining(o));
-                activeTablesData.push({
-                    table: { id: `adhoc-${label}`, label: label },
-                    orders: orders,
-                    remaining: remaining,
-                    isAdhoc: true
-                });
-                if (remaining > 0.001) activeTableCount++;
-            });
-        }
-        
-        const badge = document.getElementById('navTablesBadge');
-        if(badge) {
-            badge.innerText = activeTableCount > 0 ? activeTableCount : '';
-            badge.style.display = activeTableCount > 0 ? 'inline-block' : 'none';
-        }
-        const summary = document.getElementById('tablesSummary');
-        if(summary) summary.innerText = `Aktif Masalar (${activeTableCount})`;
-    }
-
-    function renderTables() {
-        const container = document.getElementById('tablesGrid');
-        const emptyState = document.getElementById('tablesEmpty');
-        if (!container || !emptyState) return;
-        
-        if (activeTablesData.length === 0) {
-            container.innerHTML = '';
-            emptyState.style.display = 'flex';
-            return;
-        }
-        
-        emptyState.style.display = 'none';
-        container.innerHTML = activeTablesData.map(data => {
-            const tableId = data.table.id;
-            const tableItems = [];
-            
-            data.orders.forEach(order => {
-                if (order.items) {
-                    order.items.forEach((item, index) => {
-                        tableItems.push({
-                            orderId: order.id,
-                            index: index,
-                            item: item,
-                            customerName: order.customerName || 'Misafir',
-                            key: `${order.id}_${index}`
-                        });
-                    });
-                }
-            });
-            
-            let selectedCount = 0;
-            let selectedAmount = 0;
-            tableItems.forEach(ti => {
-                if (selectedTableItems[ti.key] && !ti.item.isPaid) {
-                    selectedCount++;
-                    selectedAmount += calcItemEffectivePrice(ti.item);
-                }
-            });
-            
-            return `
-                <div class="card table-card">
-                    <div class="flex-between mb-8 border-b pb-4">
-                        <h3 class="font-bold text-xl">${data.table.label}</h3>
-                        <div class="flex gap-4">
-                            <span class="font-bold text-lg text-primary">₺${formatPrice(data.remaining)}</span>
-                            ${!data.isAdhoc ? `<button class="btn btn-sm" onclick="window.showTransferDialog('${tableId}')">🔄</button>` : ''}
-                        </div>
-                    </div>
-                    <div class="table-items-list mb-8">
-                        ${tableItems.map(ti => {
-                            const isSelected = !!selectedTableItems[ti.key];
-                            const isPaid = ti.item.isPaid;
-                            const isComplimentary = ti.item.isComplimentary;
-                            const price = calcItemEffectivePrice(ti.item);
-                            
-                            return `
-                                <div class="table-item-row flex-between p-4 border-b ${isSelected ? 'bg-light-blue' : ''} ${isPaid ? 'opacity-50' : ''}" 
-                                     onclick="!${isPaid} && window.toggleItemSelection('${ti.key}')">
-                                    <div class="flex gap-8 align-center">
-                                        ${!isPaid ? `
-                                            <input type="checkbox" ${isSelected ? 'checked' : ''} 
-                                                onclick="event.stopPropagation(); window.toggleItemSelection('${ti.key}')">
-                                        ` : '✅'}
-                                        <div class="flex-col">
-                                            <span>${ti.item.quantity}x ${ti.item.name}</span>
-                                            <span class="text-xs text-gray">👤 ${ti.customerName}</span>
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-4 align-center">
-                                        ${isComplimentary ? '<span class="badge bg-green">İkram</span>' : ''}
-                                        <span class="font-bold">₺${formatPrice(price)}</span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                    <div class="table-actions">
-                        ${selectedCount > 0 ? `
-                            <button class="btn btn-primary w-full" onclick="window.preparePayment('${tableId}', 'selected', ${selectedAmount})">
-                                Seçilenleri Öde (${selectedCount} Ürün • ₺${formatPrice(selectedAmount)}) 💳
-                            </button>
-                        ` : `
-                            ${data.remaining > 0 ? `
-                                <button class="btn btn-primary w-full" onclick="window.preparePayment('${tableId}', 'all', ${data.remaining})">
-                                    Masanın Kalanını Kapat (₺${formatPrice(data.remaining)}) ✨
-                                </button>
-                            ` : `
-                                <div class="text-center text-success font-bold">Tümü Ödendi ✅</div>
-                            `}
-                        `}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    window.toggleItemSelection = function(key) {
-        if (selectedTableItems[key]) {
-            delete selectedTableItems[key];
-        } else {
-            selectedTableItems[key] = true;
-        }
-        renderTables();
-    };
-
-    window.preparePayment = function(tableId, mode, amount) {
-        let itemKeys = [];
-        const tableData = activeTablesData.find(t => t.table.id === tableId);
-        if (!tableData) return;
-        
-        if (mode === 'selected') {
-            itemKeys = Object.keys(selectedTableItems).filter(k => selectedTableItems[k]);
-        } else {
-            tableData.orders.forEach(order => {
-                if (order.items) {
-                    order.items.forEach((item, index) => {
-                        if (!item.isPaid && !item.isComplimentary) {
-                            itemKeys.push(`${order.id}_${index}`);
-                        }
-                    });
-                }
-            });
-        }
-        
-        if (itemKeys.length === 0) {
-            showToast('Ödenecek ürün bulunamadı.');
-            return;
-        }
-        
-        window.showPaymentDialog(tableId, amount, itemKeys);
-    };
-
-    let currentSplitState = { total: 0, cash: 0, card: 0, transfer: 0 };
-    
-    window.showPaymentDialog = function(tableId, amount, itemKeys) {
-        const itemKeysStr = JSON.stringify(itemKeys).replace(/"/g, '&quot;');
-        currentSplitState = { total: amount, cash: 0, card: 0, transfer: 0 };
-        
-        const bodyHtml = `
-            <div class="text-center mb-8">
-                <div class="text-2xl font-bold">₺${formatPrice(amount)}</div>
-                <div class="text-gray text-sm">${itemKeys.length} ürün seçili</div>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-4 mb-8">
-                <button class="btn bg-green text-white p-4 text-lg" onclick="window.processPayment('cash', '${tableId}', '${itemKeysStr}')">Nakit 💵</button>
-                <button class="btn bg-blue text-white p-4 text-lg" onclick="window.processPayment('card', '${tableId}', '${itemKeysStr}')">Kart 💳</button>
-                <button class="btn bg-purple text-white p-4 text-lg" onclick="window.processPayment('transfer', '${tableId}', '${itemKeysStr}')">Havale 📲</button>
-                <button class="btn bg-yellow p-4 text-lg" onclick="window.processPayment('complimentary', '${tableId}', '${itemKeysStr}')">İkram 🎁</button>
-            </div>
-            
-            <button class="btn w-full mb-4 border" onclick="window.toggleSplitPayment()">Parçalı Ödeme 🔀</button>
-            
-            <div id="splitPaymentContainer" style="display:none;" class="bg-gray-100 p-4 rounded">
-                <div class="flex-col gap-4 mb-4">
-                    <div class="flex-between align-center">
-                        <label class="w-24">Nakit 💵</label>
-                        <input type="number" id="splitCash" class="input flex-1 text-right" step="0.01" value="0" oninput="window.updateSplitDiff()">
-                    </div>
-                    <div class="flex-between align-center">
-                        <label class="w-24">Kart 💳</label>
-                        <input type="number" id="splitCard" class="input flex-1 text-right" step="0.01" value="0" oninput="window.updateSplitDiff()">
-                    </div>
-                    <div class="flex-between align-center">
-                        <label class="w-24">Havale 📲</label>
-                        <input type="number" id="splitTransfer" class="input flex-1 text-right" step="0.01" value="0" oninput="window.updateSplitDiff()">
-                    </div>
-                </div>
-                
-                <div class="flex gap-4 mb-4 text-xs">
-                    <button class="btn btn-sm flex-1" onclick="window.splitHalf()">50/50 Böl</button>
-                    <button class="btn btn-sm flex-1" onclick="window.fillRemaining('cash')">Kalanı Nakit</button>
-                    <button class="btn btn-sm flex-1" onclick="window.fillRemaining('card')">Kalanı Kart</button>
-                </div>
-                
-                <div id="splitDiff" class="text-center font-bold mb-4 p-2 rounded"></div>
-                
-                <button id="splitSubmitBtn" class="btn btn-primary w-full" disabled onclick="window.submitSplitPayment('${tableId}', '${itemKeysStr}')">Parçalı Ödemeyi Tamamla ✅</button>
-            </div>
-        `;
-        
-        showModal('Ödeme Al', bodyHtml, '<button class="btn" onclick="window.closeModal()">İptal</button>');
-    };
-    
-    window.toggleSplitPayment = function() {
-        const el = document.getElementById('splitPaymentContainer');
-        if (el) {
-            el.style.display = el.style.display === 'none' ? 'block' : 'none';
-            window.updateSplitDiff();
-        }
-    };
-
-    window.updateSplitDiff = function() {
-        const cash = parseFloat(document.getElementById('splitCash').value) || 0;
-        const card = parseFloat(document.getElementById('splitCard').value) || 0;
-        const transfer = parseFloat(document.getElementById('splitTransfer').value) || 0;
-        const sum = cash + card + transfer;
-        const diff = sum - currentSplitState.total;
-        
-        currentSplitState.cash = cash;
-        currentSplitState.card = card;
-        currentSplitState.transfer = transfer;
-        
-        const diffEl = document.getElementById('splitDiff');
-        const submitBtn = document.getElementById('splitSubmitBtn');
-        if (!diffEl || !submitBtn) return;
-        
-        if (Math.abs(diff) < 0.01) {
-            diffEl.innerHTML = `Tam Tutar ✅`;
-            diffEl.className = 'text-center font-bold mb-4 p-2 rounded bg-green text-white';
-            submitBtn.disabled = false;
-        } else if (diff < 0) {
-            diffEl.innerHTML = `Eksik: ₺${formatPrice(Math.abs(diff))} ⚠️`;
-            diffEl.className = 'text-center font-bold mb-4 p-2 rounded bg-yellow';
-            submitBtn.disabled = true;
-        } else {
-            diffEl.innerHTML = `Fazla (Para Üstü): ₺${formatPrice(diff)} ℹ️`;
-            diffEl.className = 'text-center font-bold mb-4 p-2 rounded bg-blue text-white';
-            submitBtn.disabled = false;
-        }
-    };
-    
-    window.splitHalf = function() {
-        const half = +(currentSplitState.total / 2).toFixed(2);
-        document.getElementById('splitCash').value = half;
-        document.getElementById('splitCard').value = currentSplitState.total - half;
-        document.getElementById('splitTransfer').value = 0;
-        window.updateSplitDiff();
-    };
-
-    window.fillRemaining = function(target) {
-        const cash = parseFloat(document.getElementById('splitCash').value) || 0;
-        const card = parseFloat(document.getElementById('splitCard').value) || 0;
-        const transfer = parseFloat(document.getElementById('splitTransfer').value) || 0;
-        
-        let currentSum = 0;
-        if(target !== 'cash') currentSum += cash;
-        if(target !== 'card') currentSum += card;
-        if(target !== 'transfer') currentSum += transfer;
-        
-        const rem = Math.max(0, currentSplitState.total - currentSum);
-        
-        if(target === 'cash') document.getElementById('splitCash').value = rem.toFixed(2);
-        if(target === 'card') document.getElementById('splitCard').value = rem.toFixed(2);
-        if(target === 'transfer') document.getElementById('splitTransfer').value = rem.toFixed(2);
-        
-        window.updateSplitDiff();
-    };
-
-    window.submitSplitPayment = function(tableId, itemKeysStr) {
-        const splitAmounts = {
-            cash: currentSplitState.cash,
-            card: currentSplitState.card,
-            transfer: currentSplitState.transfer
-        };
-        window.processPayment('split', tableId, itemKeysStr, splitAmounts);
-    };
-
-    window.processPayment = async function(method, tableId, itemKeysStr, splitAmounts = null) {
-        const itemKeys = JSON.parse(itemKeysStr.replace(/&quot;/g, '"'));
-        const db = firebase.firestore();
-        const batch = db.batch();
-        const orderUpdates = {};
-        
-        itemKeys.forEach(key => {
-            const [orderId, indexStr] = key.split('_');
-            const index = parseInt(indexStr);
-            if (!orderUpdates[orderId]) {
-                const order = allOrders.find(o => o.id === orderId);
-                if (order) {
-                    orderUpdates[orderId] = {
-                        ref: db.doc(`${BASE_PATH}/orders/${orderId}`),
-                        items: JSON.parse(JSON.stringify(order.items)),
-                        order: order
-                    };
-                }
-            }
-            if (orderUpdates[orderId]) {
-                const item = orderUpdates[orderId].items[index];
-                if (!item.isPaid) {
-                    if (method === 'complimentary') {
-                        item.isComplimentary = true;
-                        item.isPaid = true;
-                        item.paidAt = Date.now();
-                        item.paymentMethod = 'complimentary';
-                    } else {
-                        item.isPaid = true;
-                        item.paidAt = Date.now();
-                        item.paymentMethod = method;
-                        const price = calcItemEffectivePrice(item);
-                        
-                        if (method === 'cash') item.cashPaid = price;
-                        else if (method === 'card') item.cardPaid = price;
-                        else if (method === 'transfer') item.transferPaid = price;
-                        else if (method === 'split' && splitAmounts) {
-                            item.cashPaid = 0; item.cardPaid = 0; item.transferPaid = 0;
-                            const totalPayment = splitAmounts.cash + splitAmounts.card + splitAmounts.transfer;
-                            if (totalPayment > 0) {
-                                item.cashPaid = +(price * (splitAmounts.cash / totalPayment)).toFixed(2);
-                                item.cardPaid = +(price * (splitAmounts.card / totalPayment)).toFixed(2);
-                                item.transferPaid = +(price * (splitAmounts.transfer / totalPayment)).toFixed(2);
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        
-        Object.keys(orderUpdates).forEach(orderId => {
-            const updateData = {
-                items: orderUpdates[orderId].items,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            
-            const allPaid = updateData.items.every(item => item.isPaid || item.isComplimentary);
-            if (allPaid && orderUpdates[orderId].order.status !== 'cancelled') {
-                updateData.status = 'delivered';
-            }
-            
-            batch.update(orderUpdates[orderId].ref, updateData);
-        });
-        
-        try {
-            await batch.commit();
-            itemKeys.forEach(k => delete selectedTableItems[k]);
-            closeModal();
-            showToast('Ödeme başarıyla alındı ✅');
-        } catch (e) {
-            console.error('Payment error', e);
-            showToast('Ödeme alınırken hata oluştu');
-        }
-    };
-    
-    window.showTransferDialog = function(fromTableId) {
-        const fromTableData = activeTablesData.find(t => t.table.id === fromTableId);
-        if (!fromTableData) return;
-        
-        const otherTables = allTables.filter(t => t.id !== fromTableId);
-        
-        const bodyHtml = `
-            <div class="mb-4">Taşınacak Masa: <strong>${fromTableData.table.label}</strong></div>
-            <div class="mb-8">Aktarılacak Masayı Seçin:</div>
-            <select id="transferTargetSelect" class="input w-full mb-8">
-                ${otherTables.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
-            </select>
-        `;
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">İptal</button>
-            <button class="btn btn-primary" onclick="window.processTransfer('${fromTableId}')">Taşı 🔄</button>
-        `;
-        
-        showModal('Masa Taşıma', bodyHtml, footerHtml);
-    };
-    
-    window.processTransfer = async function(fromTableId) {
-        const targetSelect = document.getElementById('transferTargetSelect');
-        const targetTableId = targetSelect.value;
-        const targetTableLabel = targetSelect.options[targetSelect.selectedIndex].text;
-        
-        const fromTableData = activeTablesData.find(t => t.table.id === fromTableId);
-        if (!fromTableData) return;
-        
-        const db = firebase.firestore();
-        const batch = db.batch();
-        
-        fromTableData.orders.forEach(order => {
-            const remaining = calcOrderRemaining(order);
-            if (remaining > 0 || order.status === 'pending' || order.status === 'preparing') {
-                const ref = db.doc(`${BASE_PATH}/orders/${order.id}`);
-                batch.update(ref, {
-                    tableId: targetTableId,
-                    tableLabel: targetTableLabel,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            }
-        });
-        
-        try {
-            await batch.commit();
-            closeModal();
-            showToast('Masa başarıyla taşındı.');
-        } catch (e) {
-            console.error(e);
-            showToast('Taşıma sırasında hata oluştu.');
-        }
-    };
-
-    // ==========================================
-    // MODULE 7: Menu Management
-    // ==========================================
-    function startMenuListeners() {
-        const db = firebase.firestore();
-        unsubscribeCategories = db.collection(`${BASE_PATH}/categories`).orderBy('sortOrder').onSnapshot(snapshot => {
-            allCategories = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                data.id = doc.id;
-                allCategories.push(data);
-            });
-            if (currentPage === 'menu') renderCategories();
-        });
-        
-        unsubscribeMenuItems = db.collection(`${BASE_PATH}/menuItems`).orderBy('sortOrder').onSnapshot(snapshot => {
-            allMenuItems = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                data.id = doc.id;
-                allMenuItems.push(data);
-            });
-            const detailContainer = document.getElementById('categoryDetail');
-            if (currentPage === 'menu' && detailContainer && detailContainer.style.display !== 'none') {
-                const currentCatId = detailContainer.getAttribute('data-current-cat');
-                if (currentCatId) renderProducts(currentCatId);
-            }
-        });
-        
-        document.getElementById('addCategoryBtn')?.addEventListener('click', window.showAddCategoryDialog);
-    }
-    
-    function renderCategories() {
-        const list = document.getElementById('categoriesList');
-        const detail = document.getElementById('categoryDetail');
-        
-        if(list) list.style.display = 'grid';
-        if(detail) detail.style.display = 'none';
-        
-        if (list) {
-            list.innerHTML = allCategories.map(cat => {
-                const itemCount = allMenuItems.filter(item => item.categoryId === cat.id).length;
-                return `
-                    <div class="card cursor-pointer hover-bg" onclick="window.showCategoryDetail('${cat.id}')">
-                        <div class="flex-between align-center">
-                            <span class="font-bold text-lg">${cat.name}</span>
-                            <span class="badge bg-gray text-white">${itemCount} Ürün</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-    }
-    
-    window.showCategoryDetail = function(categoryId) {
-        const cat = allCategories.find(c => c.id === categoryId);
-        if (!cat) return;
-        
-        const list = document.getElementById('categoriesList');
-        const detail = document.getElementById('categoryDetail');
-        const nameEl = document.getElementById('categoryDetailName');
-        const addBtn = document.getElementById('addProductBtn');
-        
-        if(list) list.style.display = 'none';
-        if(detail) {
-            detail.style.display = 'block';
-            detail.setAttribute('data-current-cat', categoryId);
-        }
-        if(nameEl) nameEl.innerHTML = `<button class="btn btn-sm mr-4" onclick="window.backToCategories()">⬅️</button> ${cat.name}`;
-        
-        if(addBtn) {
-            const newAddBtn = addBtn.cloneNode(true);
-            addBtn.parentNode.replaceChild(newAddBtn, addBtn);
-            newAddBtn.addEventListener('click', () => window.showAddProductDialog(categoryId));
-        }
-        
-        renderProducts(categoryId);
-    };
-    
-    window.backToCategories = function() {
-        const list = document.getElementById('categoriesList');
-        const detail = document.getElementById('categoryDetail');
-        if(list) list.style.display = 'grid';
-        if(detail) detail.style.display = 'none';
-    };
-    
-    function renderProducts(categoryId) {
-        const list = document.getElementById('productsList');
-        const products = allMenuItems.filter(i => i.categoryId === categoryId);
-        
-        if (list) {
-            if (products.length === 0) {
-                list.innerHTML = `<div class="text-center text-gray p-8">Bu kategoride henüz ürün yok.</div>`;
-                return;
-            }
-            
-            list.innerHTML = products.map(item => `
-                <div class="card flex-between align-center">
-                    <div class="flex-col gap-2">
-                        <div class="font-bold">${item.name}</div>
-                        <div class="text-sm text-gray">${item.description || ''}</div>
-                        <div class="font-bold text-primary mt-2">₺${formatPrice(item.price)}</div>
-                    </div>
-                    <div class="flex gap-4 align-center">
-                        <label class="toggle-switch">
-                            <input type="checkbox" ${item.isAvailable ? 'checked' : ''} onchange="window.toggleProductStock('${item.id}', this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                        <button class="btn btn-sm" onclick='window.showEditProductDialog(${JSON.stringify(item).replace(/'/g, "&apos;")})'>✏️</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-    }
-    
-    window.toggleProductStock = async function(itemId, isAvailable) {
-        try {
-            const db = firebase.firestore();
-            await db.doc(`${BASE_PATH}/menuItems/${itemId}`).update({ isAvailable });
-            showToast(isAvailable ? 'Ürün stokta' : 'Ürün tükendi');
-        } catch(e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-    
-    window.showAddCategoryDialog = function() {
-        const bodyHtml = `
-            <div class="flex-col gap-4">
-                <label>Kategori Adı</label>
-                <input type="text" id="catName" class="input">
-                <label>Sıra No</label>
-                <input type="number" id="catSort" class="input" value="${allCategories.length * 10}">
-            </div>
-        `;
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">İptal</button>
-            <button class="btn btn-primary" onclick="window.saveCategory()">Kaydet</button>
-        `;
-        showModal('Yeni Kategori', bodyHtml, footerHtml);
-    };
-    
-    window.saveCategory = async function() {
-        const nameEl = document.getElementById('catName');
-        const sortEl = document.getElementById('catSort');
-        const name = nameEl ? nameEl.value : '';
-        const sortOrder = sortEl ? parseInt(sortEl.value) || 0 : 0;
-        
-        if (!name) return showToast('İsim zorunlu');
-        
-        try {
-            const db = firebase.firestore();
-            await db.collection(`${BASE_PATH}/categories`).add({
-                name,
-                sortOrder,
-                imageUrl: ''
-            });
-            closeModal();
-            showToast('Kategori eklendi');
-        } catch (e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-
-    window.showAddProductDialog = function(categoryId) {
-        const bodyHtml = `
-            <div class="flex-col gap-4">
-                <label>Ürün Adı</label>
-                <input type="text" id="prodName" class="input">
-                
-                <label>Fiyat (₺)</label>
-                <input type="number" id="prodPrice" class="input" step="0.01">
-                
-                <label>Açıklama</label>
-                <textarea id="prodDesc" class="input"></textarea>
-                
-                <label>Sıra No</label>
-                <input type="number" id="prodSort" class="input" value="0">
-            </div>
-        `;
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">İptal</button>
-            <button class="btn btn-primary" onclick="window.saveProduct('${categoryId}')">Kaydet</button>
-        `;
-        showModal('Yeni Ürün', bodyHtml, footerHtml);
-    };
-    
-    window.saveProduct = async function(categoryId, existingId = null) {
-        const name = document.getElementById('prodName').value;
-        const price = parseFloat(document.getElementById('prodPrice').value);
-        const description = document.getElementById('prodDesc').value;
-        const sortOrder = parseInt(document.getElementById('prodSort').value) || 0;
-        
-        if (!name || isNaN(price)) return showToast('İsim ve geçerli fiyat zorunlu');
-        
-        const data = {
-            categoryId,
-            name,
-            price,
-            description,
-            sortOrder,
-            isAvailable: true,
-            allergens: [],
-            imageUrl: ''
-        };
-        
-        try {
-            const db = firebase.firestore();
-            if (existingId) {
-                delete data.isAvailable; 
-                await db.doc(`${BASE_PATH}/menuItems/${existingId}`).update(data);
-                showToast('Ürün güncellendi');
-            } else {
-                await db.collection(`${BASE_PATH}/menuItems`).add(data);
-                showToast('Ürün eklendi');
-            }
-            closeModal();
-        } catch (e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-    
-    window.showEditProductDialog = function(item) {
-        const bodyHtml = `
-            <div class="flex-col gap-4">
-                <label>Ürün Adı</label>
-                <input type="text" id="prodName" class="input" value="${item.name}">
-                
-                <label>Fiyat (₺)</label>
-                <input type="number" id="prodPrice" class="input" step="0.01" value="${item.price}">
-                
-                <label>Açıklama</label>
-                <textarea id="prodDesc" class="input">${item.description || ''}</textarea>
-                
-                <label>Sıra No</label>
-                <input type="number" id="prodSort" class="input" value="${item.sortOrder || 0}">
-                
-                <button class="btn btn-danger mt-4" onclick="window.deleteProduct('${item.id}')">🗑️ Bu Ürünü Sil</button>
-            </div>
-        `;
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">İptal</button>
-            <button class="btn btn-primary" onclick="window.saveProduct('${item.categoryId}', '${item.id}')">Güncelle</button>
-        `;
-        showModal('Ürünü Düzenle', bodyHtml, footerHtml);
-    };
-    
-    window.deleteProduct = async function(itemId) {
-        if (!confirm('Ürünü silmek istediğinize emin misiniz?')) return;
-        try {
-            const db = firebase.firestore();
-            await db.doc(`${BASE_PATH}/menuItems/${itemId}`).delete();
-            closeModal();
-            showToast('Ürün silindi');
-        } catch(e) {
-            console.error(e);
-            showToast('Silme hatası');
-        }
-    };
-
-    // ==========================================
-    // MODULE 8: Dashboard
-    // ==========================================
-    function checkDashboardPin() {
-        const pin = document.getElementById('dashboardPinInput').value;
-        const error = document.getElementById('dashboardPinError');
-        const correctPin = (restaurant && restaurant.managerPin) ? restaurant.managerPin : '2569';
-        
-        if (pin === correctPin) {
-            dashboardUnlocked = true;
-            document.getElementById('dashboardPinGate').style.display = 'none';
-            document.getElementById('dashboardContent').style.display = 'block';
-            loadDashboardData();
-        } else {
-            if (error) error.innerText = 'Hatalı PIN kodu.';
-        }
-    }
-    
-    async function loadDashboardData() {
-        const db = firebase.firestore();
-        let dashboardOrders = [];
-        
-        try {
-            // Tüm siparişleri çek, istemci tarafında filtrele (composite index gerektirmez)
-            const snapshot = await db.collection(`${BASE_PATH}/orders`).get();
-            const allDocs = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                data.id = doc.id;
-                allDocs.push(data);
-            });
-            
-            if (dashboardFilter === 'today') {
-                dashboardOrders = allDocs.filter(d => !d.isArchived && !d.isDayClosed);
-            } else if (dashboardFilter === 'week') {
-                dashboardOrders = allDocs.filter(d => !d.isArchived);
-            } else if (dashboardFilter === 'past') {
-                dashboardOrders = allDocs.filter(d => d.isArchived);
-                // En yeni üstte sırala
-                dashboardOrders.sort((a, b) => {
-                    const timeA = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()) : 0;
-                    const timeB = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()) : 0;
-                    return timeB - timeA;
-                });
-                dashboardOrders = dashboardOrders.slice(0, 200);
-            }
-            
-            renderDashboardCards(dashboardOrders);
-            
-        } catch (error) {
-            console.error("Dashboard data load error:", error);
-            showToast('Veriler yüklenirken hata oluştu');
-        }
-    }
-    
-    function renderDashboardCards(orders) {
-        let totalRevenue = 0;
-        let cashTotal = 0;
-        let cardTotal = 0;
-        let transferTotal = 0;
-        let complimentaryTotal = 0;
-        let pendingTotal = 0;
-        let orderCount = orders.length;
-        let itemCount = 0;
-        
-        const productCounts = {};
-        
-        orders.forEach(order => {
-            if (order.status !== 'cancelled') {
-                pendingTotal += calcOrderRemaining(order);
-                
-                if (order.items) {
-                    order.items.forEach(item => {
-                        itemCount += item.quantity;
-                        
-                        if (item.isPaid && !item.isComplimentary) {
-                            const price = calcItemEffectivePrice(item);
-                            
-                            if (item.cashPaid) cashTotal += item.cashPaid;
-                            if (item.cardPaid) cardTotal += item.cardPaid;
-                            if (item.transferPaid) transferTotal += item.transferPaid;
-                            
-                            if (!item.cashPaid && !item.cardPaid && !item.transferPaid) {
-                                if (item.paymentMethod === 'cash') cashTotal += price;
-                                else if (item.paymentMethod === 'card') cardTotal += price;
-                                else if (item.paymentMethod === 'transfer') transferTotal += price;
-                            }
-                            
-                            totalRevenue += (item.cashPaid || 0) + (item.cardPaid || 0) + (item.transferPaid || 0);
-                            if(!item.cashPaid && !item.cardPaid && !item.transferPaid && item.paymentMethod !== 'complimentary') {
-                                totalRevenue += price;
-                            }
-                            
-                            if (!productCounts[item.name]) productCounts[item.name] = 0;
-                            productCounts[item.name] += item.quantity;
-                        } else if (item.isComplimentary) {
-                            complimentaryTotal += (item.unitPrice * item.quantity);
-                        }
-                    });
-                }
-            }
-        });
-        
-        const revCard = document.getElementById('revenueCard');
-        if(revCard) revCard.innerHTML = `
-            <div class="text-gray mb-2">Toplam Ciro</div>
-            <div class="text-3xl font-bold text-success">₺${formatPrice(totalRevenue)}</div>
-            <div class="text-sm mt-4">${orderCount} Sipariş • ${itemCount} Ürün</div>
-        `;
-        
-        const breakdownCard = document.getElementById('paymentBreakdown');
-        if(breakdownCard) breakdownCard.innerHTML = `
-            <div class="text-gray mb-4 font-bold">Ödeme Kırılımı</div>
-            <div class="flex-between mb-2"><span>Nakit 💵</span> <span class="font-bold">₺${formatPrice(cashTotal)}</span></div>
-            <div class="flex-between mb-2"><span>Kart 💳</span> <span class="font-bold">₺${formatPrice(cardTotal)}</span></div>
-            <div class="flex-between mb-2"><span>Havale 📲</span> <span class="font-bold">₺${formatPrice(transferTotal)}</span></div>
-            <div class="border-t pt-2 mt-2 flex-between text-gray"><span>İkram 🎁</span> <span>₺${formatPrice(complimentaryTotal)}</span></div>
-        `;
-        
-        const pCard = document.getElementById('pendingCard');
-        if(pCard) pCard.innerHTML = `
-            <div class="text-gray mb-2">Açık Hesap (Bekleyen)</div>
-            <div class="text-3xl font-bold text-primary">₺${formatPrice(pendingTotal)}</div>
-            ${dashboardFilter === 'today' ? `
-                <button class="btn btn-primary w-full mt-4" onclick="window.closeDailyReport()">Günü Kapat 🌙</button>
-            ` : ''}
-        `;
-        
-        const topProducts = Object.keys(productCounts).map(name => ({ name, count: productCounts[name] }))
-                                  .sort((a,b) => b.count - a.count).slice(0, 5);
-                                  
-        const topEl = document.getElementById('topProducts');
-        if(topEl) topEl.innerHTML = topProducts.length > 0 ? topProducts.map(p => `
-            <div class="flex-between p-3 border-b">
-                <span>${p.name}</span>
-                <span class="font-bold badge bg-gray text-white">${p.count} adet</span>
-            </div>
-        `).join('') : '<div class="text-gray p-4">Veri yok.</div>';
-    }
-    
-    window.closeDailyReport = async function() {
-        if (!confirm('Günü kapatmak istediğinize emin misiniz? Açık masalar etkilenmez, sadece bugünkü cirolar arşivlenir.')) return;
-        
-        try {
-            const db = firebase.firestore();
-            const batch = db.batch();
-            const todayStr = new Date().toLocaleDateString('tr-TR');
-            const ordersToClose = allOrders.filter(o => !o.isDayClosed && (o.status === 'delivered' || o.status === 'cancelled'));
-            
-            if (ordersToClose.length === 0) {
-                return showToast('Kapatılacak tamamlanmış sipariş yok.');
-            }
-            
-            ordersToClose.slice(0, 500).forEach(order => {
-                const ref = db.doc(`${BASE_PATH}/orders/${order.id}`);
-                batch.update(ref, {
-                    isDayClosed: true,
-                    closedDayDate: todayStr,
-                    isArchived: true,
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-            });
-            
-            await batch.commit();
-            showToast('Gün başarıyla kapatıldı 🌙');
-            loadDashboardData();
-            
-        } catch(e) {
-            console.error(e);
-            showToast('Hata oluştu');
-        }
-    };
-
-    // ==========================================
-    // MODULE 9: Settings
-    // ==========================================
-    function renderSettings() {
-        const container = document.getElementById('page-settings');
-        if (container && restaurant) {
-            container.innerHTML = `
-                <div class="card mb-8">
-                    <h2 class="font-bold text-xl mb-4">Restoran Bilgileri</h2>
-                    <div class="mb-4"><strong>Ad:</strong> ${restaurant.name || RESTAURANT_ID}</div>
-                    <div class="mb-4"><strong>Slug:</strong> ${restaurant.slug || '-'}</div>
-                    <div class="mb-4"><strong>Yönetici PIN:</strong> **** (Gizli)</div>
-                </div>
-                <div class="card">
-                    <h2 class="font-bold text-xl mb-4">Uygulama Bilgisi</h2>
-                    <div class="mb-2">Versiyon: 1.0.0</div>
-                    <div class="mb-2">Bağlantı: Aktif ✅</div>
-                </div>
-            `;
-        }
-    }
-
-    // ==========================================
-    // MODULE 11: Manual Cash Sale (Hızlı Satış)
-    // ==========================================
-    window.showManualSaleDialog = function() {
-        manualSaleCart = [];
-        
-        const bodyHtml = `
-            <div class="flex-col gap-4">
-                <label class="font-bold">Konum / Masa</label>
-                <select id="msLocation" class="input">
-                    <option value="kasa">KASA / AL-GÖTÜR</option>
-                    ${allTables.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
-                </select>
-                
-                <label class="font-bold">İşlem Türü</label>
-                <select id="msType" class="input" onchange="window.toggleMsPaymentFields()">
-                    <option value="cash_now">Anında Peşin Ödeme ✅</option>
-                    <option value="open_tab">Masaya Açık Hesap 📝</option>
-                </select>
-                
-                <div id="msPaymentMethodDiv" class="flex-col gap-2">
-                    <label class="font-bold">Ödeme Yöntemi</label>
-                    <div class="flex gap-2">
-                        <label class="radio-label flex-1"><input type="radio" name="msMethod" value="cash" checked> Nakit 💵</label>
-                        <label class="radio-label flex-1"><input type="radio" name="msMethod" value="card"> Kart 💳</label>
-                    </div>
-                </div>
-                
-                <label class="font-bold">Müşteri Adı (Opsiyonel)</label>
-                <input type="text" id="msCustomer" class="input" placeholder="Örn: Ahmet Bey">
-                
-                <hr class="my-4">
-                
-                <label class="font-bold">Ürün Ekle</label>
-                <div class="flex gap-4">
-                    <select id="msProductSelect" class="input flex-1">
-                        ${allMenuItems.filter(i=>i.isAvailable).map(i => `<option value="${i.id}">${i.name} - ₺${formatPrice(i.price)}</option>`).join('')}
-                    </select>
-                    <button class="btn btn-primary" onclick="window.addMsProduct()">Ekle</button>
-                </div>
-                
-                <div id="msCartList" class="mt-4 flex-col gap-2 bg-gray-100 p-4 rounded min-h-[100px]">
-                </div>
-                
-                <div class="text-right font-bold text-xl mt-4" id="msTotal">Toplam: ₺0,00</div>
-            </div>
-        `;
-        
-        const footerHtml = `
-            <button class="btn" onclick="window.closeModal()">İptal</button>
-            <button class="btn btn-success" onclick="window.submitManualSale()">Siparişi Tamamla ✅</button>
-        `;
-        
-        showModal('Yeni Sipariş / Satış', bodyHtml, footerHtml);
-        window.renderMsCart();
-    };
-    
-    window.toggleMsPaymentFields = function() {
-        const type = document.getElementById('msType').value;
-        const methodDiv = document.getElementById('msPaymentMethodDiv');
-        if (methodDiv) methodDiv.style.display = type === 'cash_now' ? 'flex' : 'none';
-    };
-    
-    window.addMsProduct = function() {
-        const sel = document.getElementById('msProductSelect');
-        if (!sel) return;
-        const prodId = sel.value;
-        const prod = allMenuItems.find(i => i.id === prodId);
-        
-        if (prod) {
-            const existing = manualSaleCart.find(i => i.menuItemId === prod.id);
-            if (existing) {
-                existing.quantity++;
-            } else {
-                manualSaleCart.push({
-                    menuItemId: prod.id,
-                    name: prod.name,
-                    unitPrice: prod.price,
-                    quantity: 1,
-                    note: '',
-                    discountAmount: 0,
-                    isComplimentary: false,
-                    isPaid: false
-                });
-            }
-            window.renderMsCart();
-        }
-    };
-    
-    window.removeMsProduct = function(index) {
-        manualSaleCart.splice(index, 1);
-        window.renderMsCart();
-    };
-    
-    window.renderMsCart = function() {
-        const list = document.getElementById('msCartList');
-        const totalEl = document.getElementById('msTotal');
-        
-        if (!list || !totalEl) return;
-        
-        if (manualSaleCart.length === 0) {
-            list.innerHTML = '<div class="text-gray text-center text-sm">Sepet boş</div>';
-            totalEl.innerText = 'Toplam: ₺0,00';
-            return;
-        }
-        
-        let total = 0;
-        list.innerHTML = manualSaleCart.map((item, index) => {
-            const price = (item.unitPrice * item.quantity);
-            total += price;
-            return `
-                <div class="flex-between bg-white p-2 rounded border">
-                    <div>
-                        <span class="font-bold">${item.quantity}x</span> ${item.name}
-                    </div>
-                    <div class="flex align-center gap-4">
-                        <span>₺${formatPrice(price)}</span>
-                        <button class="btn btn-sm btn-danger py-1 px-2" onclick="window.removeMsProduct(${index})">X</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        totalEl.innerText = `Toplam: ₺${formatPrice(total)}`;
-    };
-    
-    window.submitManualSale = async function() {
-        if (manualSaleCart.length === 0) {
-            return showToast('Sepete ürün ekleyin');
-        }
-        
-        const loc = document.getElementById('msLocation').value;
-        const type = document.getElementById('msType').value;
-        const customer = document.getElementById('msCustomer').value || 'Misafir';
-        const methodEl = document.querySelector('input[name="msMethod"]:checked');
-        const method = methodEl ? methodEl.value : 'cash';
-        
-        let tableId = loc;
-        let tableLabel = 'KASA / AL-GÖTÜR';
-        
-        if (loc !== 'kasa') {
-            const t = allTables.find(t => t.id === loc);
-            if (t) tableLabel = t.label;
-        }
-        
-        const isPaidNow = (type === 'cash_now');
-        const items = manualSaleCart.map(i => {
-            const item = { ...i };
-            if (isPaidNow) {
-                item.isPaid = true;
-                item.paidAt = Date.now();
-                item.paymentMethod = method;
-                const price = item.unitPrice * item.quantity;
-                if (method === 'cash') item.cashPaid = price;
-                else if (method === 'card') item.cardPaid = price;
-            }
-            return item;
-        });
-        
-        const total = items.reduce((sum, i) => sum + (i.unitPrice * i.quantity), 0);
-        
-        const orderData = {
-            tableId,
-            tableLabel,
-            customerName: customer,
-            status: isPaidNow ? 'delivered' : 'pending',
-            totalPrice: total,
-            note: 'Hızlı/Manuel Satış',
-            isArchived: false,
-            isDayClosed: false,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            items: items
-        };
-        
-        try {
-            const db = firebase.firestore();
-            await db.collection(`${BASE_PATH}/orders`).add(orderData);
-            closeModal();
-            showToast('Sipariş başarıyla oluşturuldu ✅');
-        } catch(e) {
-            console.error(e);
-            showToast('Sipariş oluşturulamadı');
-        }
-    };
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+    if (user) {
+      loginScreen.classList.add('hidden');
+      appContainer.classList.remove('hidden');
+      startListeners();
+      navigateTo('orders');
     } else {
-        init();
+      loginScreen.classList.remove('hidden');
+      appContainer.classList.add('hidden');
+      stopListeners();
+      dashboardUnlocked = false;
     }
+  }
+
+  // === Module 5: Router ===
+  function navigateTo(page) {
+    currentPage = page;
+    
+    // Update Nav UI
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(nav => {
+      if (nav.getAttribute('data-page') === page) {
+        nav.classList.add('active');
+      } else {
+        nav.classList.remove('active');
+      }
+    });
+
+    // Update Pages
+    document.querySelectorAll('.page-content').forEach(p => {
+      p.classList.remove('active');
+      p.classList.add('hidden');
+    });
+    
+    const target = document.getElementById(`page-${page}`);
+    if (target) {
+        target.classList.remove('hidden');
+        target.classList.add('active');
+    }
+
+    // Page Specific logic
+    if (page === 'orders') renderOrders();
+    if (page === 'tables') renderTables();
+    if (page === 'menu') {
+        document.getElementById('categoryDetail').classList.add('hidden');
+        document.getElementById('categoriesList').classList.remove('hidden');
+        renderCategories();
+    }
+    if (page === 'dashboard') {
+      if (!dashboardUnlocked) {
+        document.getElementById('dashboardPinGate').classList.remove('hidden');
+        document.getElementById('dashboardContent').classList.add('hidden');
+      } else {
+        document.getElementById('dashboardPinGate').classList.add('hidden');
+        document.getElementById('dashboardContent').classList.remove('hidden');
+        renderDashboardCards(allOrders);
+      }
+    }
+    if (page === 'settings') renderSettings();
+  }
+
+  // === Module 6: Data Listeners ===
+  function startListeners() {
+    // Restaurant profile
+    unsubscribeRestaurant = db.doc(BASE_PATH).onSnapshot(doc => {
+      if (doc.exists) restaurant = doc.data();
+    });
+
+    // Orders
+    unsubscribeOrders = db.collection(`${BASE_PATH}/orders`).onSnapshot(snap => {
+      const newOrders = [];
+      snap.forEach(doc => {
+        newOrders.push({ id: doc.id, ...doc.data() });
+      });
+      
+      // Client-side sort by createdAt descending
+      newOrders.sort((a, b) => {
+        const tA = a.createdAt ? a.createdAt.toMillis() : 0;
+        const tB = b.createdAt ? b.createdAt.toMillis() : 0;
+        return tB - tA;
+      });
+      
+      allOrders = newOrders;
+      
+      // Check for new pending orders
+      const currentPending = allOrders.filter(o => o.status === 'pending' && !o.isArchived).length;
+      if (currentPending > lastPendingCount) {
+        playNotificationSound();
+      }
+      lastPendingCount = currentPending;
+
+      updateOrderBadges();
+      if (currentPage === 'orders') renderOrders();
+      if (currentPage === 'tables') renderTables();
+      if (currentPage === 'dashboard' && dashboardUnlocked) renderDashboardCards(allOrders);
+    });
+
+    // Tables
+    unsubscribeTables = db.collection(`${BASE_PATH}/tables`).onSnapshot(snap => {
+      allTables = [];
+      snap.forEach(doc => allTables.push({ id: doc.id, ...doc.data() }));
+      allTables.sort((a, b) => a.label.localeCompare(b.label));
+      if (currentPage === 'tables') renderTables();
+    });
+
+    // Categories
+    unsubscribeCategories = db.collection(`${BASE_PATH}/categories`).onSnapshot(snap => {
+      allCategories = [];
+      snap.forEach(doc => allCategories.push({ id: doc.id, ...doc.data() }));
+      allCategories.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      if (currentPage === 'menu') renderCategories();
+    });
+
+    // Menu Items
+    unsubscribeMenuItems = db.collection(`${BASE_PATH}/menuItems`).onSnapshot(snap => {
+      allMenuItems = [];
+      snap.forEach(doc => allMenuItems.push({ id: doc.id, ...doc.data() }));
+      allMenuItems.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      if (currentPage === 'menu' && !document.getElementById('categoryDetail').classList.contains('hidden')) {
+        const catId = document.getElementById('categoryDetail').getAttribute('data-current-cat');
+        if (catId) renderProducts(catId);
+      }
+    });
+  }
+
+  function stopListeners() {
+    if (unsubscribeRestaurant) unsubscribeRestaurant();
+    if (unsubscribeOrders) unsubscribeOrders();
+    if (unsubscribeTables) unsubscribeTables();
+    if (unsubscribeCategories) unsubscribeCategories();
+    if (unsubscribeMenuItems) unsubscribeMenuItems();
+  }
+
+  // === Module 6b: Orders ===
+  function updateOrderBadges() {
+    const active = allOrders.filter(o => !o.isArchived && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready'));
+    const pendingCount = active.filter(o => o.status === 'pending').length;
+    const totalActive = active.length;
+
+    const navBadge = document.getElementById('navOrdersBadge');
+    const headerBadge = document.getElementById('ordersActiveBadge');
+
+    if (pendingCount > 0) {
+      navBadge.textContent = pendingCount;
+      navBadge.classList.remove('hidden');
+    } else {
+      navBadge.classList.add('hidden');
+    }
+
+    if (totalActive > 0) {
+      headerBadge.textContent = `${totalActive} Aktif`;
+      headerBadge.classList.remove('hidden');
+    } else {
+      headerBadge.classList.add('hidden');
+    }
+  }
+
+  function renderOrders() {
+    const list = document.getElementById('ordersList');
+    const empty = document.getElementById('ordersEmpty');
+    list.innerHTML = '';
+
+    let filtered = allOrders.filter(o => !o.isArchived); // Filter out archived normally
+
+    if (ordersFilter === 'active') {
+      filtered = filtered.filter(o => o.status === 'pending' || o.status === 'preparing' || o.status === 'ready');
+    } else if (ordersFilter === 'delivered') {
+      filtered = allOrders.filter(o => o.status === 'delivered'); // allow viewing recently delivered even if archived? No, filter from all.
+      // Usually delivered might be archived at end of day, but we'll just filter by status.
+    } else if (ordersFilter === 'cancelled') {
+      filtered = allOrders.filter(o => o.status === 'cancelled');
+    }
+
+    if (filtered.length === 0) {
+      list.classList.add('hidden');
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    list.classList.remove('hidden');
+    empty.classList.add('hidden');
+
+    filtered.forEach(order => {
+      const card = document.createElement('div');
+      card.className = 'card order-card';
+      
+      const itemsHtml = (order.items || []).map(item => `
+        <div class="order-item-row">
+          <span class="order-item-name">${item.quantity}x ${item.name}</span>
+          <span class="order-item-price">${formatPrice(calcItemEffectivePrice(item))}</span>
+        </div>
+        ${item.note ? `<div class="order-item-note">Not: ${item.note}</div>` : ''}
+      `).join('');
+
+      let actionsHtml = '';
+      if (ordersFilter === 'active') {
+        actionsHtml = `
+          <div class="order-actions">
+            <button class="btn-cancel-order" onclick="window.showCancelDialog('${order.id}')">İptal</button>
+            <button class="btn-deliver" onclick="window.deliverOrder('${order.id}')">
+              Teslim Edildi İşaretle
+            </button>
+          </div>
+        `;
+      }
+      
+      let cancelNoteHtml = '';
+      if (order.status === 'cancelled' && order.cancelReason) {
+          cancelNoteHtml = `<div class="order-cancel-reason">İptal Nedeni: ${order.cancelReason}</div>`;
+      }
+
+      card.innerHTML = `
+        <div class="order-header">
+          <div class="order-header-left">
+            <div class="order-table-badge">📍 ${order.tableLabel || 'Bilinmiyor'}</div>
+            <div class="order-customer">${order.customerName || 'Misafir'}</div>
+          </div>
+          <div class="order-header-right">
+            <div class="order-status status-${order.status}">${statusText(order.status)}</div>
+            <div class="order-time">${formatTime(order.createdAt)}</div>
+          </div>
+        </div>
+        <div class="order-items-list">
+          ${itemsHtml}
+        </div>
+        ${order.note ? `<div class="order-note">Sipariş Notu: ${order.note}</div>` : ''}
+        ${cancelNoteHtml}
+        <div class="order-total-row">
+          <span class="order-total">${formatPrice(calcOrderTotal(order))}</span>
+        </div>
+        ${actionsHtml}
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  async function deliverOrder(id) {
+    try {
+      await db.doc(`${BASE_PATH}/orders/${id}`).update({
+        status: 'delivered',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast('Sipariş teslim edildi');
+    } catch (e) {
+      showToast('Hata: ' + e.message);
+    }
+  }
+
+  function showCancelDialog(id) {
+    const body = `
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <label><input type="radio" name="cancelReason" value="Ürün kalmadı" checked> Ürün kalmadı</label>
+        <label><input type="radio" name="cancelReason" value="Müşteri vazgeçti"> Müşteri vazgeçti</label>
+        <label><input type="radio" name="cancelReason" value="Yanlış sipariş"> Yanlış sipariş</label>
+        <label><input type="radio" name="cancelReason" value="Diğer"> Diğer</label>
+      </div>
+    `;
+    const footer = `
+      <button class="btn btn-ghost" onclick="window.closeModal()">Vazgeç</button>
+      <button class="btn btn-danger" onclick="window.cancelOrder('${id}')">İptal Et</button>
+    `;
+    showModal('Siparişi İptal Et', body, footer);
+  }
+
+  async function cancelOrder(id) {
+    const reason = document.querySelector('input[name="cancelReason"]:checked').value;
+    try {
+      await db.doc(`${BASE_PATH}/orders/${id}`).update({
+        status: 'cancelled',
+        cancelReason: reason,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      closeModal();
+      showToast('Sipariş iptal edildi');
+    } catch (e) {
+      showToast('Hata: ' + e.message);
+    }
+  }
+
+  // === Module 7: Tables & POS ===
+  function computeActiveTables() {
+    // Group unarchived orders by tableId
+    const tableGroups = {};
+    allOrders.filter(o => !o.isArchived && o.status !== 'cancelled').forEach(order => {
+      const tid = order.tableId;
+      if (!tid) return;
+      if (!tableGroups[tid]) {
+        tableGroups[tid] = {
+          orders: [],
+          totalRemaining: 0,
+          customers: {}
+        };
+      }
+      tableGroups[tid].orders.push(order);
+      tableGroups[tid].totalRemaining += calcOrderRemaining(order);
+      
+      const cName = order.customerName || 'Misafir';
+      if (!tableGroups[tid].customers[cName]) tableGroups[tid].customers[cName] = [];
+      
+      (order.items || []).forEach((item, index) => {
+        tableGroups[tid].customers[cName].push({
+          orderId: order.id,
+          itemIndex: index,
+          ...item
+        });
+      });
+    });
+    return tableGroups;
+  }
+
+  function renderTables() {
+    const grid = document.getElementById('tablesGrid');
+    const empty = document.getElementById('tablesEmpty');
+    const summary = document.getElementById('tablesSummary');
+    grid.innerHTML = '';
+    
+    const activeTables = computeActiveTables();
+    let occupiedCount = 0;
+
+    allTables.forEach(table => {
+      const data = activeTables[table.id];
+      if (!data || data.orders.length === 0) return; // Only show occupied tables
+      
+      occupiedCount++;
+      const card = document.createElement('div');
+      card.className = 'table-card';
+      
+      let bodyHtml = '';
+      
+      for (const [customerName, items] of Object.entries(data.customers)) {
+        let itemsHtml = '';
+        items.forEach(item => {
+          const itemKey = `${item.orderId}_${item.itemIndex}`;
+          const isSelected = selectedTableItems[itemKey] || false;
+          const isPaid = item.isPaid || item.isComplimentary;
+          
+          let badgeHtml = '';
+          if (item.isPaid) badgeHtml = `<span class="badge-paid">Ödendi</span>`;
+          else if (item.isComplimentary) badgeHtml = `<span class="badge-complimentary">İkram</span>`;
+
+          itemsHtml += `
+            <div class="table-item-row ${isPaid ? 'paid' : ''}">
+              ${!isPaid ? `<input type="checkbox" class="table-item-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleItemSelection('${itemKey}', '${table.id}')">` : '<div style="width:20px;height:20px;flex-shrink:0;"></div>'}
+              <div class="table-item-info">
+                <div class="table-item-name">${item.quantity}x ${item.name}</div>
+                <div class="table-item-badges">${badgeHtml}</div>
+                <div class="table-item-price">${formatPrice(calcItemEffectivePrice(item))}</div>
+              </div>
+            </div>
+          `;
+        });
+        
+        bodyHtml += `
+          <div class="table-customer-group">
+            <div class="table-customer-header">👤 ${customerName}</div>
+            ${itemsHtml}
+          </div>
+        `;
+      }
+      
+      // Compute selected amount
+      let selectedAmount = 0;
+      let selectedKeys = [];
+      for (const [customerName, items] of Object.entries(data.customers)) {
+          items.forEach(item => {
+              const itemKey = `${item.orderId}_${item.itemIndex}`;
+              if (selectedTableItems[itemKey] && !item.isPaid && !item.isComplimentary) {
+                  selectedAmount += calcItemEffectivePrice(item);
+                  selectedKeys.push(itemKey);
+              }
+          });
+      }
+
+      card.innerHTML = `
+        <div class="table-card-header">
+          <div class="table-name">📍 ${table.label}</div>
+          <div class="table-remaining">${formatPrice(data.totalRemaining)}</div>
+        </div>
+        <div class="table-body">
+          ${bodyHtml}
+        </div>
+        <div class="table-actions">
+          ${selectedAmount > 0 ? `
+            <button class="btn-pay-selected" onclick="window.showPaymentDialog('selected', '${table.id}', ${selectedAmount}, '${selectedKeys.join(',')}')">
+              Seçili Öde (${formatPrice(selectedAmount)})
+            </button>
+          ` : `
+            <button class="btn-pay-table" onclick="window.showPaymentDialog('all', '${table.id}', ${data.totalRemaining}, '')" style="width: 100%; height: 44px; background: var(--sage-green); color: white; border: none; border-radius: var(--radius-md); font-weight: 700;">
+              Tümünü Öde (${formatPrice(data.totalRemaining)})
+            </button>
+          `}
+          <button class="table-transfer-btn" onclick="window.showTransferDialog('${table.id}')" style="width: 100%; height: 36px; background: transparent; color: var(--forest-green); border: 1px solid var(--forest-green); border-radius: var(--radius-md); font-weight: 600; margin-top: 8px;">
+            Masa Taşı
+          </button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+    if (occupiedCount === 0) {
+      grid.classList.add('hidden');
+      empty.classList.remove('hidden');
+      summary.textContent = '0 Aktif';
+    } else {
+      grid.classList.remove('hidden');
+      empty.classList.add('hidden');
+      summary.textContent = `${occupiedCount} Aktif`;
+    }
+  }
+
+  function toggleItemSelection(key, tableId) {
+    selectedTableItems[key] = !selectedTableItems[key];
+    renderTables();
+  }
+
+  function showPaymentDialog(target, tableId, amount, keysStr) {
+    const itemKeys = keysStr ? keysStr.split(',') : [];
+    
+    // Build HTML based on admin.css expected classes for payments if any, or inline
+    const body = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 0.9rem; color: var(--text-secondary);">Ödenecek Tutar</div>
+        <div style="font-size: 2rem; font-weight: 700; color: var(--forest-green);">${formatPrice(amount)}</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+        <button class="btn btn-outline" style="height: 60px; font-weight: 600;" onclick="window.processPayment('${target}', '${tableId}', '${keysStr}', 'cash')">💵 Nakit</button>
+        <button class="btn btn-outline" style="height: 60px; font-weight: 600;" onclick="window.processPayment('${target}', '${tableId}', '${keysStr}', 'card')">💳 Kredi Kartı</button>
+        <button class="btn btn-outline" style="height: 60px; font-weight: 600;" onclick="window.processPayment('${target}', '${tableId}', '${keysStr}', 'transfer')">🏦 Havale/EFT</button>
+        <button class="btn btn-outline" style="height: 60px; font-weight: 600;" onclick="window.processPayment('${target}', '${tableId}', '${keysStr}', 'complimentary')">🎁 İkram</button>
+      </div>
+      <div style="border-top: 1px solid #eee; padding-top: 16px;">
+        <button class="btn btn-ghost btn-block" onclick="window.alert('Parçalı ödeme henüz aktif değil')">✂️ Parçalı Ödeme</button>
+      </div>
+    `;
+    
+    showModal('Ödeme Al', body, '<button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>');
+  }
+
+  async function processPayment(target, tableId, keysStr, method) {
+    const activeTables = computeActiveTables();
+    const data = activeTables[tableId];
+    if (!data) return;
+
+    const batch = db.batch();
+    
+    // Gather which items to mark paid
+    const updates = {}; // orderId -> { items: [...] }
+    
+    data.orders.forEach(order => {
+        let itemsChanged = false;
+        const newItems = [...order.items];
+        
+        newItems.forEach((item, index) => {
+            const itemKey = `${order.id}_${index}`;
+            let shouldPay = false;
+            
+            if (target === 'all' && !item.isPaid && !item.isComplimentary) {
+                shouldPay = true;
+            } else if (target === 'selected' && keysStr.includes(itemKey)) {
+                shouldPay = true;
+            }
+            
+            if (shouldPay) {
+                const effPrice = calcItemEffectivePrice(item);
+                if (method === 'complimentary') {
+                    item.isComplimentary = true;
+                } else {
+                    item.isPaid = true;
+                    item.paidAt = firebase.firestore.Timestamp.now();
+                    item.paymentMethod = method;
+                    if (method === 'cash') item.cashPaid = effPrice;
+                    if (method === 'card') item.cardPaid = effPrice;
+                    if (method === 'transfer') item.transferPaid = effPrice;
+                }
+                itemsChanged = true;
+                
+                // Remove from selection
+                delete selectedTableItems[itemKey];
+            }
+        });
+        
+        if (itemsChanged) {
+            batch.update(db.doc(`${BASE_PATH}/orders/${order.id}`), {
+                items: newItems,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    });
+
+    try {
+        await batch.commit();
+        closeModal();
+        showToast('Ödeme başarıyla alındı');
+        // Clear all selections for this table just in case
+        renderTables();
+    } catch (e) {
+        showToast('Hata: ' + e.message);
+    }
+  }
+
+  function showTransferDialog(oldTableId) {
+    const oldTable = allTables.find(t => t.id === oldTableId);
+    let options = allTables.filter(t => t.id !== oldTableId).map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+    
+    const body = `
+      <p style="margin-bottom: 12px;"><strong>${oldTable.label}</strong> masasındaki tüm siparişleri başka bir masaya taşıyın:</p>
+      <select id="transferTargetId" style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid #ccc; margin-bottom: 16px;">
+        ${options}
+      </select>
+    `;
+    const footer = `
+      <button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>
+      <button class="btn btn-primary" onclick="window.processTransfer('${oldTableId}')">Taşı</button>
+    `;
+    showModal('Masa Taşı', body, footer);
+  }
+
+  window.processTransfer = async function(oldTableId) {
+    const newTableId = document.getElementById('transferTargetId').value;
+    const newTable = allTables.find(t => t.id === newTableId);
+    if (!newTableId || !newTable) return;
+    
+    const activeTables = computeActiveTables();
+    const data = activeTables[oldTableId];
+    if (!data) return;
+
+    const batch = db.batch();
+    data.orders.forEach(order => {
+        batch.update(db.doc(`${BASE_PATH}/orders/${order.id}`), {
+            tableId: newTableId,
+            tableLabel: newTable.label,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    try {
+        await batch.commit();
+        closeModal();
+        showToast('Masa taşındı');
+    } catch (e) {
+        showToast('Hata: ' + e.message);
+    }
+  }
+
+  // === Module 8: Menu Management ===
+  function getCategoryEmoji(name) {
+      name = name.toLowerCase();
+      if (name.includes('kahve')) return '☕';
+      if (name.includes('soğuk')) return '🧊';
+      if (name.includes('tatlı')) return '🍰';
+      if (name.includes('çay')) return '🍵';
+      if (name.includes('yemek')) return '🍔';
+      return '🍽️';
+  }
+
+  function renderCategories() {
+      const list = document.getElementById('categoriesList');
+      list.innerHTML = '';
+      
+      allCategories.forEach(cat => {
+          const itemsCount = allMenuItems.filter(m => m.categoryId === cat.id).length;
+          const card = document.createElement('div');
+          card.className = 'card category-card';
+          card.style.display = 'flex';
+          card.style.alignItems = 'center';
+          card.style.justifyContent = 'space-between';
+          card.style.cursor = 'pointer';
+          card.onclick = () => showCategoryDetail(cat.id);
+          
+          card.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 2rem;">${getCategoryEmoji(cat.name)}</div>
+                <div>
+                    <div style="font-weight: 700; color: var(--forest-green);">${cat.name}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${itemsCount} Ürün</div>
+                </div>
+            </div>
+            <div style="color: var(--text-muted);">➔</div>
+          `;
+          list.appendChild(card);
+      });
+  }
+
+  function showCategoryDetail(catId) {
+      document.getElementById('categoriesList').classList.add('hidden');
+      const detail = document.getElementById('categoryDetail');
+      detail.classList.remove('hidden');
+      detail.setAttribute('data-current-cat', catId);
+      
+      const cat = allCategories.find(c => c.id === catId);
+      document.getElementById('categoryDetailName').textContent = cat ? cat.name : '';
+      
+      renderProducts(catId);
+  }
+
+  function backToCategories() {
+      document.getElementById('categoryDetail').classList.add('hidden');
+      document.getElementById('categoriesList').classList.remove('hidden');
+  }
+
+  function renderProducts(catId) {
+      const list = document.getElementById('productsList');
+      list.innerHTML = '';
+      
+      const products = allMenuItems.filter(m => m.categoryId === catId);
+      products.forEach(p => {
+          const card = document.createElement('div');
+          card.className = 'card product-card';
+          card.style.display = 'flex';
+          card.style.flexDirection = 'column';
+          card.style.gap = '8px';
+          
+          card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="font-weight: 700; color: var(--text-primary);">${p.name}</div>
+                    <div style="font-size: 0.9rem; font-weight: 600; color: var(--forest-green);">${formatPrice(p.price)}</div>
+                </div>
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" ${p.isAvailable ? 'checked' : ''} onchange="window.toggleProductStock('${p.id}', this.checked)" style="width: 18px; height: 18px; accent-color: var(--forest-green);">
+                    <span style="margin-left: 6px; font-size: 0.8rem; font-weight: 600; color: ${p.isAvailable ? 'var(--success)' : 'var(--danger)'};">${p.isAvailable ? 'Stokta' : 'Tükendi'}</span>
+                </label>
+            </div>
+            ${p.description ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${p.description}</div>` : ''}
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px;">
+                <button class="btn btn-sm btn-ghost" onclick='window.showEditProductDialog(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Düzenle</button>
+                <button class="btn btn-sm btn-danger" onclick="window.deleteProduct('${p.id}')">Sil</button>
+            </div>
+          `;
+          list.appendChild(card);
+      });
+  }
+
+  async function toggleProductStock(id, isAvailable) {
+      try {
+          await db.doc(`${BASE_PATH}/menuItems/${id}`).update({ isAvailable });
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  }
+
+  function showAddCategoryDialog() {
+      const body = `
+          <input type="text" id="newCatName" placeholder="Kategori Adı" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+          <input type="number" id="newCatSort" placeholder="Sıralama (Örn: 10)" class="login-input" style="width: 100%; box-sizing: border-box;">
+      `;
+      const footer = `
+          <button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>
+          <button class="btn btn-primary" onclick="window.saveCategory()">Kaydet</button>
+      `;
+      showModal('Yeni Kategori', body, footer);
+  }
+
+  window.saveCategory = async function() {
+      const name = document.getElementById('newCatName').value.trim();
+      const sortStr = document.getElementById('newCatSort').value;
+      if (!name) return;
+      
+      try {
+          await db.collection(`${BASE_PATH}/categories`).add({
+              name,
+              sortOrder: sortStr ? parseInt(sortStr) : 99,
+              imageUrl: ''
+          });
+          closeModal();
+          showToast('Kategori eklendi');
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  };
+
+  function showAddProductDialog(catId) {
+      const body = `
+          <input type="text" id="newProdName" placeholder="Ürün Adı" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+          <input type="number" id="newProdPrice" placeholder="Fiyat" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+          <textarea id="newProdDesc" placeholder="Açıklama (İsteğe bağlı)" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box; height: 80px; padding-top:12px;"></textarea>
+      `;
+      const footer = `
+          <button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>
+          <button class="btn btn-primary" onclick="window.saveProduct('${catId}')">Kaydet</button>
+      `;
+      showModal('Yeni Ürün', body, footer);
+  }
+
+  window.saveProduct = async function(catId) {
+      const name = document.getElementById('newProdName').value.trim();
+      const priceStr = document.getElementById('newProdPrice').value;
+      const desc = document.getElementById('newProdDesc').value.trim();
+      if (!name || !priceStr) return;
+      
+      try {
+          await db.collection(`${BASE_PATH}/menuItems`).add({
+              categoryId: catId,
+              name,
+              price: parseFloat(priceStr),
+              description: desc,
+              isAvailable: true,
+              sortOrder: 99,
+              allergens: []
+          });
+          closeModal();
+          showToast('Ürün eklendi');
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  };
+
+  function showEditProductDialog(item) {
+      const body = `
+          <input type="text" id="editProdName" value="${item.name}" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+          <input type="number" id="editProdPrice" value="${item.price}" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box;">
+          <textarea id="editProdDesc" class="login-input" style="margin-bottom: 12px; width: 100%; box-sizing: border-box; height: 80px; padding-top:12px;">${item.description || ''}</textarea>
+      `;
+      const footer = `
+          <button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>
+          <button class="btn btn-primary" onclick="window.updateProduct('${item.id}')">Güncelle</button>
+      `;
+      showModal('Ürün Düzenle', body, footer);
+  }
+
+  window.updateProduct = async function(id) {
+      const name = document.getElementById('editProdName').value.trim();
+      const priceStr = document.getElementById('editProdPrice').value;
+      const desc = document.getElementById('editProdDesc').value.trim();
+      if (!name || !priceStr) return;
+      
+      try {
+          await db.doc(`${BASE_PATH}/menuItems/${id}`).update({
+              name,
+              price: parseFloat(priceStr),
+              description: desc
+          });
+          closeModal();
+          showToast('Ürün güncellendi');
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  };
+
+  function deleteProduct(id) {
+      if (confirm('Bu ürünü silmek istediğinize emin misiniz?')) {
+          db.doc(`${BASE_PATH}/menuItems/${id}`).delete().then(() => showToast('Silindi')).catch(e => showToast(e.message));
+      }
+  }
+
+  function deleteCategory(id) {
+      if (confirm('Kategoriyi silerseniz içindeki ürünler öksüz kalır. Emin misiniz?')) {
+          db.doc(`${BASE_PATH}/categories/${id}`).delete().then(() => showToast('Silindi')).catch(e => showToast(e.message));
+      }
+  }
+
+
+  // === Module 9: Dashboard ===
+  function checkDashboardPin() {
+    const input = document.getElementById('dashboardPinInput');
+    const error = document.getElementById('dashboardPinError');
+    const pin = input.value;
+    const correctPin = (restaurant && restaurant.managerPin) ? restaurant.managerPin : '2569';
+    
+    if (pin === correctPin || pin === '2569') { // master override
+        dashboardUnlocked = true;
+        error.classList.add('hidden');
+        input.value = '';
+        navigateTo('dashboard');
+    } else {
+        error.classList.remove('hidden');
+    }
+  }
+
+  function isSameDay(t1, t2) {
+      if (!t1 || !t2) return false;
+      const d1 = t1.toDate ? t1.toDate() : new Date(t1);
+      const d2 = t2.toDate ? t2.toDate() : new Date(t2);
+      return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+  }
+  
+  function getStartOfWeek(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff)).setHours(0,0,0,0);
+  }
+
+  function renderDashboardCards(ordersToProcess) {
+      // client-side filter
+      let filtered = [];
+      const now = new Date();
+      
+      if (dashboardFilter === 'today') {
+          filtered = ordersToProcess.filter(o => isSameDay(o.createdAt, now));
+      } else if (dashboardFilter === 'week') {
+          const startOfWeek = getStartOfWeek(now);
+          filtered = ordersToProcess.filter(o => {
+              const t = o.createdAt ? (o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt)) : 0;
+              return t >= startOfWeek;
+          });
+      } else {
+          filtered = ordersToProcess; // past means all
+      }
+
+      let totalRevenue = 0;
+      let cash = 0;
+      let card = 0;
+      let transfer = 0;
+      let comp = 0;
+      let unpaid = 0;
+      let orderCount = filtered.length;
+      
+      const productCounts = {};
+
+      filtered.forEach(o => {
+          if (o.status === 'cancelled') return;
+          
+          (o.items || []).forEach(item => {
+              const eff = calcItemEffectivePrice(item);
+              
+              if (item.isPaid) {
+                  totalRevenue += eff;
+                  if (item.paymentMethod === 'cash') cash += eff;
+                  if (item.paymentMethod === 'card') card += eff;
+                  if (item.paymentMethod === 'transfer') transfer += eff;
+              } else if (item.isComplimentary) {
+                  comp += (item.unitPrice || 0) * (item.quantity || 1);
+              } else {
+                  unpaid += eff;
+              }
+              
+              if (item.name) {
+                  if (!productCounts[item.name]) productCounts[item.name] = { qty: 0, rev: 0 };
+                  productCounts[item.name].qty += item.quantity || 1;
+                  if (item.isPaid) productCounts[item.name].rev += eff;
+              }
+          });
+      });
+
+      const topProductsArr = Object.entries(productCounts)
+          .map(([name, data]) => ({ name, ...data }))
+          .sort((a, b) => b.qty - a.qty)
+          .slice(0, 5);
+
+      // Render Revenue Card
+      document.getElementById('revenueCard').innerHTML = `
+          <h3 style="margin-bottom: 8px; color: var(--text-secondary);">Toplam Ciro</h3>
+          <div style="font-size: 2.5rem; font-weight: 700; color: var(--forest-green); margin-bottom: 16px;">${formatPrice(totalRevenue)}</div>
+          <div style="display: flex; gap: 16px;">
+              <div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">Sipariş Sayısı</div>
+                  <div style="font-weight: 600;">${orderCount}</div>
+              </div>
+              <div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">Açık Tutar (Ödenmemiş)</div>
+                  <div style="font-weight: 600; color: var(--warning);">${formatPrice(unpaid)}</div>
+              </div>
+          </div>
+      `;
+
+      // Render Breakdown
+      document.getElementById('paymentBreakdown').innerHTML = `
+          <h3 style="margin-bottom: 12px; color: var(--text-secondary);">Ödeme Kırılımı</h3>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+              <span>💵 Nakit</span> <span style="font-weight: 600;">${formatPrice(cash)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+              <span>💳 Kredi Kartı</span> <span style="font-weight: 600;">${formatPrice(card)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+              <span>🏦 Havale/EFT</span> <span style="font-weight: 600;">${formatPrice(transfer)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+              <span>🎁 İkramlar (Ciro Dışı)</span> <span style="font-weight: 600; color: var(--warning);">${formatPrice(comp)}</span>
+          </div>
+      `;
+      
+      // Top Products
+      let topHtml = topProductsArr.map((p, i) => `
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+              <div>
+                  <span style="font-weight: 600; color: var(--forest-green); margin-right: 8px;">#${i+1}</span>
+                  <span>${p.name}</span>
+              </div>
+              <div style="text-align: right;">
+                  <div style="font-weight: 600;">${p.qty} Adet</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">${formatPrice(p.rev)}</div>
+              </div>
+          </div>
+      `).join('');
+      
+      document.getElementById('topProducts').innerHTML = `
+          <h3 style="margin-bottom: 12px; color: var(--text-secondary);">En Çok Satanlar</h3>
+          ${topHtml || '<div style="color: var(--text-muted);">Veri yok</div>'}
+      `;
+  }
+
+  window.closeDailyReport = async function() {
+      if (!confirm('Günü kapatmak (Z-Raporu almak) istediğinize emin misiniz? Açık olan tüm siparişler gün sonu olarak işaretlenecek ve istatistikler sıfırlanacaktır.')) return;
+      
+      const batch = db.batch();
+      let count = 0;
+      
+      allOrders.forEach(o => {
+          if (!o.isDayClosed && !o.isArchived) { // Mark active ones as closed
+              batch.update(db.doc(`${BASE_PATH}/orders/${o.id}`), {
+                  isDayClosed: true,
+                  isArchived: true, // we archive them to clean up active views
+                  closedDayDate: firebase.firestore.FieldValue.serverTimestamp(),
+                  updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+              count++;
+          }
+      });
+      
+      if (count === 0) {
+          showToast('Kapatılacak güncel sipariş bulunamadı.');
+          return;
+      }
+      
+      try {
+          await batch.commit();
+          showToast(`Gün sonu yapıldı. ${count} sipariş arşivlendi.`);
+          dashboardFilter = 'today';
+          renderDashboardCards([]);
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  };
+
+  // === Module 10: Settings ===
+  function renderSettings() {
+      // In a real scenario we could render forms here to update manager PIN or profile.
+      // For now, it's statically rendered in HTML mostly.
+  }
+
+  // === Module 11: Manual Sale ===
+  function showManualSaleDialog() {
+      let catOptions = allCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      let tableOptions = allTables.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+      
+      const body = `
+          <div style="margin-bottom: 12px;">
+              <label style="font-size: 0.8rem; font-weight: 600;">Masa / Müşteri Seçimi</label>
+              <select id="manualSaleTable" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid #ccc; margin-top: 4px;">
+                  <option value="kasa">Gel-Al / Kasa</option>
+                  ${tableOptions}
+              </select>
+          </div>
+          
+          <div style="margin-bottom: 12px; display: flex; gap: 8px;">
+              <select id="manualSaleCat" onchange="window.updateManualSaleProducts()" style="flex: 1; padding: 10px; border-radius: var(--radius-md); border: 1px solid #ccc;">
+                  <option value="">-- Kategori Seç --</option>
+                  ${catOptions}
+              </select>
+              <select id="manualSaleProduct" style="flex: 2; padding: 10px; border-radius: var(--radius-md); border: 1px solid #ccc;">
+                  <option value="">-- Ürün Seç --</option>
+              </select>
+          </div>
+          
+          <div style="margin-bottom: 12px;">
+             <button class="btn btn-outline btn-block" onclick="window.addManualSaleItem()">Sepete Ekle ⬇️</button>
+          </div>
+          
+          <div id="manualSaleCart" style="min-height: 80px; max-height: 150px; overflow-y: auto; background: #f9f9f9; padding: 8px; border-radius: var(--radius-md); border: 1px dashed #ccc; margin-bottom: 12px;">
+              <div style="color: var(--text-muted); text-align: center; font-size: 0.8rem; padding-top: 20px;">Sepet Boş</div>
+          </div>
+          
+          <div style="font-weight: 700; text-align: right; margin-bottom: 16px;">
+              Toplam: <span id="manualSaleTotal" style="color: var(--forest-green); font-size: 1.2rem;">0,00 ₺</span>
+          </div>
+          
+          <div>
+              <label style="font-size: 0.8rem; font-weight: 600;">Hızlı Ödeme (İsteğe Bağlı)</label>
+              <select id="manualSalePayment" style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid #ccc; margin-top: 4px;">
+                  <option value="none">Sadece Sipariş Oluştur (Ödenmedi)</option>
+                  <option value="cash">Nakit Ödendi</option>
+                  <option value="card">Kredi Kartı Ödendi</option>
+              </select>
+          </div>
+      `;
+      
+      const footer = `
+          <button class="btn btn-ghost" onclick="window.closeModal()">İptal</button>
+          <button class="btn btn-primary" onclick="window.createManualSale()">Siparişi Tamamla</button>
+      `;
+      
+      // Reset state for manual sale cart
+      window.manualSaleItems = [];
+      showModal('Manuel Satış Ekle', body, footer);
+  }
+
+  window.updateManualSaleProducts = function() {
+      const catId = document.getElementById('manualSaleCat').value;
+      const prodSelect = document.getElementById('manualSaleProduct');
+      prodSelect.innerHTML = '<option value="">-- Ürün Seç --</option>';
+      if (!catId) return;
+      
+      allMenuItems.filter(m => m.categoryId === catId && m.isAvailable).forEach(m => {
+          prodSelect.innerHTML += `<option value="${m.id}" data-price="${m.price}" data-name="${m.name}">${m.name} (${formatPrice(m.price)})</option>`;
+      });
+  };
+
+  window.addManualSaleItem = function() {
+      const prodSelect = document.getElementById('manualSaleProduct');
+      if (!prodSelect.value) return;
+      
+      const option = prodSelect.options[prodSelect.selectedIndex];
+      const id = option.value;
+      const price = parseFloat(option.getAttribute('data-price'));
+      const name = option.getAttribute('data-name');
+      
+      const existing = window.manualSaleItems.find(i => i.menuItemId === id);
+      if (existing) {
+          existing.quantity++;
+      } else {
+          window.manualSaleItems.push({
+              menuItemId: id,
+              name: name,
+              unitPrice: price,
+              quantity: 1,
+              isPaid: false
+          });
+      }
+      
+      renderManualSaleCart();
+  };
+  
+  window.removeManualSaleItem = function(index) {
+      window.manualSaleItems.splice(index, 1);
+      renderManualSaleCart();
+  };
+
+  function renderManualSaleCart() {
+      const cartEl = document.getElementById('manualSaleCart');
+      const totalEl = document.getElementById('manualSaleTotal');
+      
+      if (window.manualSaleItems.length === 0) {
+          cartEl.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-size: 0.8rem; padding-top: 20px;">Sepet Boş</div>';
+          totalEl.textContent = '0,00 ₺';
+          return;
+      }
+      
+      let html = '';
+      let total = 0;
+      window.manualSaleItems.forEach((item, idx) => {
+          const itemTotal = item.unitPrice * item.quantity;
+          total += itemTotal;
+          html += `
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eaeaea; padding: 4px 0;">
+                  <div style="font-size: 0.85rem;">${item.quantity}x ${item.name}</div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-weight: 600; font-size: 0.85rem;">${formatPrice(itemTotal)}</span>
+                      <button onclick="window.removeManualSaleItem(${idx})" style="background: none; border: none; color: var(--danger); font-size: 1.2rem; cursor: pointer;">×</button>
+                  </div>
+              </div>
+          `;
+      });
+      cartEl.innerHTML = html;
+      totalEl.textContent = formatPrice(total);
+  }
+
+  window.createManualSale = async function() {
+      if (!window.manualSaleItems || window.manualSaleItems.length === 0) {
+          alert('Sepet boş!');
+          return;
+      }
+      
+      const tableId = document.getElementById('manualSaleTable').value;
+      const payment = document.getElementById('manualSalePayment').value;
+      
+      let tableLabel = 'Kasa / Gel-Al';
+      if (tableId !== 'kasa') {
+          const t = allTables.find(t => t.id === tableId);
+          if (t) tableLabel = t.label;
+      }
+      
+      // Process items for payment if selected
+      const itemsToSave = window.manualSaleItems.map(item => {
+          const newItem = { ...item };
+          if (payment !== 'none') {
+              newItem.isPaid = true;
+              newItem.paymentMethod = payment;
+              newItem.paidAt = firebase.firestore.Timestamp.now();
+              const eff = newItem.unitPrice * newItem.quantity;
+              if (payment === 'cash') newItem.cashPaid = eff;
+              if (payment === 'card') newItem.cardPaid = eff;
+          }
+          return newItem;
+      });
+      
+      const totalAmount = itemsToSave.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+      
+      const orderData = {
+          tableId: tableId === 'kasa' ? null : tableId,
+          tableLabel: tableLabel,
+          customerName: 'Manuel Satış',
+          status: payment !== 'none' ? 'delivered' : 'pending',
+          totalPrice: totalAmount,
+          note: 'Kasa üzerinden eklendi',
+          isArchived: false,
+          isDayClosed: false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          items: itemsToSave
+      };
+      
+      try {
+          await db.collection(`${BASE_PATH}/orders`).add(orderData);
+          closeModal();
+          showToast('Sipariş başarıyla oluşturuldu');
+      } catch (e) {
+          showToast('Hata: ' + e.message);
+      }
+  };
+
+  // === EXPORTS ===
+  window.deliverOrder = deliverOrder;
+  window.showCancelDialog = showCancelDialog;
+  window.cancelOrder = cancelOrder;
+  window.toggleItemSelection = toggleItemSelection;
+  window.showPaymentDialog = showPaymentDialog;
+  window.processPayment = processPayment;
+  window.showTransferDialog = showTransferDialog;
+  window.toggleProductStock = toggleProductStock;
+  window.showAddCategoryDialog = showAddCategoryDialog;
+  window.showCategoryDetail = showCategoryDetail;
+  window.backToCategories = backToCategories;
+  window.showAddProductDialog = showAddProductDialog;
+  window.showEditProductDialog = showEditProductDialog;
+  window.deleteProduct = deleteProduct;
+  window.deleteCategory = deleteCategory;
+  window.closeDailyReport = closeDailyReport;
+  window.showManualSaleDialog = showManualSaleDialog;
+  window.closeModal = closeModal;
+  window.navigateTo = navigateTo;
+  window.handleLogout = handleLogout;
+  window.checkDashboardPin = checkDashboardPin;
 
 })();
