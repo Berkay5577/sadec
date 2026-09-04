@@ -474,7 +474,6 @@
 
       // FCM Messaging token al
       const messaging = firebase.messaging();
-      messaging.useServiceWorker(registration);
 
       // VAPID key ile token al
       const vapidKey = 'BGxb-0sivHVZvdgnK7w2Wi_4GGKX4o3klBr2ZfpirWyHy5yy4XoBA5SP3imvgCQwPey3sW7OGB40iCV6bNYEQ6s';
@@ -555,7 +554,6 @@
       
       debugText.innerText = 'Durum: Token alınıyor...';
       const messaging = firebase.messaging();
-      messaging.useServiceWorker(registration);
       
       const vapidKey = 'BGxb-0sivHVZvdgnK7w2Wi_4GGKX4o3klBr2ZfpirWyHy5yy4XoBA5SP3imvgCQwPey3sW7OGB40iCV6bNYEQ6s';
       const token = await messaging.getToken({ vapidKey, serviceWorkerRegistration: registration });
