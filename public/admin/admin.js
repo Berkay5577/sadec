@@ -211,10 +211,31 @@
             }
             if (errorEl) errorEl.innerText = '';
             
-            await firebase.auth().signInWithEmailAndPassword(email, password);
+            try {
+                await firebase.auth().signInWithEmailAndPassword(email, password);
+            } catch (signInErr) {
+                // Hesap yoksa otomatik oluştur (Android uygulamasıyla aynı mantık)
+                console.log('Sign-in failed, trying to create account...', signInErr.code);
+                try {
+                    await firebase.auth().createUserWithEmailAndPassword(email, password);
+                } catch (signUpErr) {
+                    // Her iki deneme de başarısız
+                    throw signInErr;
+                }
+            }
         } catch (error) {
             console.error('Login error', error);
-            if (errorEl) errorEl.innerText = 'Giriş başarısız: ' + error.message;
+            let errorMsg = 'Giriş başarısız.';
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                errorMsg = 'E-posta veya şifre hatalı.';
+            } else if (error.code === 'auth/user-not-found') {
+                errorMsg = 'Kullanıcı bulunamadı.';
+            } else if (error.code === 'auth/too-many-requests') {
+                errorMsg = 'Çok fazla deneme. Lütfen biraz bekleyin.';
+            } else if (error.code === 'auth/network-request-failed') {
+                errorMsg = 'İnternet bağlantısını kontrol edin.';
+            }
+            if (errorEl) errorEl.innerText = errorMsg;
             if (loginBtn) {
                 loginBtn.disabled = false;
                 loginBtn.innerText = 'Giriş Yap';
@@ -238,8 +259,8 @@
         
         if (user) {
             currentUser = user;
-            if(loginScreen) loginScreen.style.display = 'none';
-            if(appContainer) appContainer.style.display = 'block';
+            if(loginScreen) loginScreen.classList.add('hidden');
+            if(appContainer) appContainer.classList.remove('hidden');
             
             startRestaurantListener();
             startOrdersListener();
@@ -249,8 +270,8 @@
             navigateTo('orders');
         } else {
             currentUser = null;
-            if(loginScreen) loginScreen.style.display = 'flex';
-            if(appContainer) appContainer.style.display = 'none';
+            if(loginScreen) loginScreen.classList.remove('hidden');
+            if(appContainer) appContainer.classList.add('hidden');
             if (loginBtn) {
                 loginBtn.disabled = false;
                 loginBtn.innerText = 'Giriş Yap';
