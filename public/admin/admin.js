@@ -280,6 +280,7 @@
       appContainer.classList.remove('hidden');
       startListeners();
       fixCorruptedPaidAt(); // Bozuk Timestamp → Long düzeltme (Android crash fix)
+      setupPushNotifications(); // iPhone + Desktop push bildirim kayıt
       navigateTo('orders');
     } else {
       loginScreen.classList.remove('hidden');
@@ -439,6 +440,101 @@
       }
     } catch (e) {
       console.error('paidAt fix failed:', e);
+    }
+  }
+
+  // === Module 6c: Push Notifications (iPhone PWA + Desktop) ===
+  async function setupPushNotifications() {
+    try {
+      // Service Worker kaydet
+      if (!('serviceWorker' in navigator)) {
+        console.log('Service Worker desteklenmiyor');
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register('/admin/firebase-messaging-sw.js');
+      console.log('Service Worker kaydedildi:', registration.scope);
+
+      // Bildirim izni iste
+      if (!('Notification' in window)) {
+        console.log('Bildirim API desteklenmiyor');
+        return;
+      }
+
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        // İlk kez — kullanıcıya popup çıkar
+        permission = await Notification.requestPermission();
+      }
+
+      if (permission !== 'granted') {
+        console.log('Bildirim izni verilmedi:', permission);
+        return;
+      }
+
+      // FCM Messaging token al
+      const messaging = firebase.messaging();
+      messaging.useServiceWorker(registration);
+
+      // VAPID key ile token al
+      const vapidKey = localStorage.getItem('sadec_vapid_key');
+      let token;
+      if (vapidKey) {
+        token = await messaging.getToken({ vapidKey: vapidKey, serviceWorkerRegistration: registration });
+      } else {
+        // VAPID key henüz ayarlanmadıysa, default ile dene
+        try {
+          token = await messaging.getToken({ serviceWorkerRegistration: registration });
+        } catch (e) {
+          console.log('VAPID key gerekiyor. Ayarlar > Push Bildirim bölümünden VAPID key girin.');
+          return;
+        }
+      }
+
+      if (!token) {
+        console.log('FCM token alınamadı');
+        return;
+      }
+
+      console.log('FCM Token:', token);
+
+      // Token'ı Firestore'a kaydet (pushTokens koleksiyonu)
+      await db.collection(`${BASE_PATH}/pushTokens`).doc(token.substring(0, 20)).set({
+        token: token,
+        createdAt: Date.now(),
+        platform: /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'ios-pwa' : 'web',
+        userAgent: navigator.userAgent.substring(0, 100)
+      }, { merge: true });
+
+      console.log('✅ Push bildirim token kaydedildi');
+      showToast('🔔 Bildirimler aktif!');
+
+      // Ön planda gelen bildirimler
+      messaging.onMessage((payload) => {
+        console.log('Foreground message:', payload);
+        const title = payload.notification?.title || '🔔 Yeni Sipariş';
+        const body = payload.notification?.body || '';
+        
+        // Ses çal
+        playNotificationSound();
+        
+        // Toast göster
+        showToast(`${title} — ${body}`);
+        
+        // Ön planda da bildirim göster (notification API)
+        if (Notification.permission === 'granted') {
+          new Notification(title, {
+            body: body,
+            icon: '/logo.png',
+            badge: '/logo.png',
+            vibrate: [200, 100, 200],
+            tag: 'order-' + Date.now()
+          });
+        }
+      });
+
+    } catch (error) {
+      console.error('Push notification setup failed:', error);
     }
   }
 
