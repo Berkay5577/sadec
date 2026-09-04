@@ -191,6 +191,12 @@
         <p class="text-sm text-muted">Aktif indirim ve promosyonlar</p>
         <!-- Implementation left for JS rendering or future extension -->
       </div>
+      <div class="dashboard-card mt-16">
+        <h3>Bildirim Ayarları</h3>
+        <p class="text-sm text-muted">Eğer iPhone/Web üzerinden bildirim alamıyorsanız aşağıdaki butona tıklayın.</p>
+        <button class="btn btn-primary mt-8" onclick="window.testPushNotifications()" style="width: 100%;">🔔 Bildirimleri Test Et</button>
+        <div id="pushDebugText" style="margin-top: 10px; font-size: 12px; color: var(--text-muted); word-break: break-all;">Durum: Bekleniyor...</div>
+      </div>
       <button class="btn btn-danger btn-block mt-16" id="settingsLogoutBtn">Oturumu Kapat</button>
     </div>
 
