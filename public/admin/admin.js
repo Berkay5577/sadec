@@ -97,31 +97,58 @@
   }
 
   function playNotificationSound() {
+    if (!audioContext) {
+      // Auto-init if not yet initialized (iOS might need this)
+      initAudio();
+    }
     if (!audioContext) return;
+
+    // iOS: resume suspended context
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+
     try {
-      const osc = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, audioContext.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.1);
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.05);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-      osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      osc.start();
-      osc.stop(audioContext.currentTime + 0.5);
+      // 3x bip sesi — daha dikkat çekici (Android bildirimi gibi)
+      const t = audioContext.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, t + i * 0.25);
+        gain.gain.setValueAtTime(0, t + i * 0.25);
+        gain.gain.linearRampToValueAtTime(0.6, t + i * 0.25 + 0.02);
+        gain.gain.linearRampToValueAtTime(0, t + i * 0.25 + 0.15);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(t + i * 0.25);
+        osc.stop(t + i * 0.25 + 0.15);
+      }
+      // Titreşim (destekleniyorsa)
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 200]);
+      }
     } catch (e) {
       console.log('Audio notification failed:', e);
     }
   }
 
   function initAudio() {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioContext.state === 'suspended') {
-      audioContext.resume();
+    try {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      // iOS unlock: silent buffer play
+      const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+      const source = audioContext.createBufferSource();
+      source.buffer = silentBuffer;
+      source.connect(audioContext.destination);
+      source.start(0);
+    } catch (e) {
+      console.log('Audio init failed:', e);
     }
   }
 
