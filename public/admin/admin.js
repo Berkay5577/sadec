@@ -279,6 +279,7 @@
       loginScreen.classList.add('hidden');
       appContainer.classList.remove('hidden');
       startListeners();
+      fixCorruptedPaidAt(); // Bozuk Timestamp → Long düzeltme (Android crash fix)
       navigateTo('orders');
     } else {
       loginScreen.classList.remove('hidden');
@@ -402,6 +403,43 @@
     if (unsubscribeTables) unsubscribeTables();
     if (unsubscribeCategories) unsubscribeCategories();
     if (unsubscribeMenuItems) unsubscribeMenuItems();
+  }
+
+  // Bozuk paidAt (Firestore Timestamp) → Long (milisaniye) düzeltme
+  // Web panelden ödeme alındığında Timestamp yazılmıştı, Android Long bekliyor → crash
+  async function fixCorruptedPaidAt() {
+    try {
+      const snapshot = await db.collection(`${BASE_PATH}/orders`).get();
+      const batch = db.batch();
+      let fixCount = 0;
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!data.items || !Array.isArray(data.items)) return;
+
+        let needsFix = false;
+        const fixedItems = data.items.map(item => {
+          // paidAt bir Timestamp nesnesi ise (toDate metodu varsa) → Long'a çevir
+          if (item.paidAt && typeof item.paidAt === 'object' && item.paidAt.toDate) {
+            needsFix = true;
+            return { ...item, paidAt: item.paidAt.toDate().getTime() };
+          }
+          return item;
+        });
+
+        if (needsFix) {
+          batch.update(doc.ref, { items: fixedItems });
+          fixCount++;
+        }
+      });
+
+      if (fixCount > 0) {
+        await batch.commit();
+        console.log(`✅ ${fixCount} siparişteki bozuk paidAt düzeltildi`);
+      }
+    } catch (e) {
+      console.error('paidAt fix failed:', e);
+    }
   }
 
   // === Module 6b: Orders ===
@@ -748,7 +786,7 @@
                     item.isComplimentary = true;
                 } else {
                     item.isPaid = true;
-                    item.paidAt = firebase.firestore.Timestamp.now();
+                    item.paidAt = Date.now(); // Android expects Long (milisaniye), Timestamp değil!
                     item.paymentMethod = method;
                     if (method === 'cash') item.cashPaid = effPrice;
                     if (method === 'card') item.cardPaid = effPrice;
