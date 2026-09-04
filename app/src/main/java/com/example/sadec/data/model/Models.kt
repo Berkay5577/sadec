@@ -153,12 +153,19 @@ data class OrderItem(
     var isComplimentary: Boolean = false,
     @get:PropertyName("isPaid") @set:PropertyName("isPaid")
     var isPaid: Boolean = false,
-    val paidAt: Long? = null,
+    val paidAt: Any? = null, // Long veya Firestore Timestamp olabilir (web panel uyumluluğu)
     val cashPaid: Double = 0.0,
     val cardPaid: Double = 0.0,
     val transferPaid: Double = 0.0
 ) {
     fun effectivePrice(): Double = if (isComplimentary) 0.0 else maxOf(0.0, (unitPrice * quantity) - discountAmount)
+    fun paidAtMillis(): Long? = when (paidAt) {
+        is Long -> paidAt
+        is Number -> paidAt.toLong()
+        is com.google.firebase.Timestamp -> (paidAt as com.google.firebase.Timestamp).toDate().time
+        is java.util.Date -> (paidAt as java.util.Date).time
+        else -> null
+    }
 }
 
 data class SelectedItemRef(
