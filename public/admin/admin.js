@@ -527,7 +527,13 @@
   function computeActiveTables() {
     // Group unarchived orders by tableId
     const tableGroups = {};
-    allOrders.filter(o => !o.isArchived && o.status !== 'cancelled').forEach(order => {
+    // Android mantığıyla birebir: sadece ödenmemiş siparişi olan masaları göster
+    // activeOrders = orders.filter { !isArchived && status != "cancelled" && remainingAmount() > 0.001 }
+    const activeOrders = allOrders.filter(o => 
+      !o.isArchived && o.status !== 'cancelled' && calcOrderRemaining(o) > 0.001
+    );
+
+    activeOrders.forEach(order => {
       const tid = order.tableId;
       if (!tid) return;
       if (!tableGroups[tid]) {
@@ -543,12 +549,15 @@
       const cName = order.customerName || 'Misafir';
       if (!tableGroups[tid].customers[cName]) tableGroups[tid].customers[cName] = [];
       
+      // Sadece ödenmemiş ürünleri göster
       (order.items || []).forEach((item, index) => {
-        tableGroups[tid].customers[cName].push({
-          orderId: order.id,
-          itemIndex: index,
-          ...item
-        });
+        if (!item.isPaid && !item.isComplimentary) {
+          tableGroups[tid].customers[cName].push({
+            orderId: order.id,
+            itemIndex: index,
+            ...item
+          });
+        }
       });
     });
     return tableGroups;
@@ -565,7 +574,7 @@
 
     allTables.forEach(table => {
       const data = activeTables[table.id];
-      if (!data || data.orders.length === 0) return; // Only show occupied tables
+      if (!data || data.orders.length === 0 || data.totalRemaining <= 0.001) return; // Android: sadece ödenmemiş masaları göster
       
       occupiedCount++;
       const card = document.createElement('div');
