@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1E3A2F">
+    <title>Sade.C Yönetim Paneli</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="admin.css">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK (v10.9.0 compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-storage-compat.js"></script>
+    
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDOMtZ9I-f_tSAVnoutiMLScKsH1A7ALpE",
+            authDomain: "sadec-9b458.firebaseapp.com",
+            projectId: "sadec-9b458",
+            storageBucket: "sadec-9b458.firebasestorage.app",
+            messagingSenderId: "5087463503",
+            appId: "1:5087463503:web:672df4999766da9855423a"
+        };
+        firebase.initializeApp(firebaseConfig);
+    </script>
+    
+    <script src="admin.js" defer></script>
+</head>
+<body>
+
+    <!-- 1. Login Screen Overlay -->
+    <div id="loginScreen" style="background-color: #1E3A2F;">
+        <div class="login-card">
+            <img src="/logo.png" width="80" alt="Sade.C Logo">
+            <h1>Sade.C Yönetim Paneli</h1>
+            <p>Kahvenin en saf hali • Gerze / Sinop</p>
+            <input type="email" id="loginEmail" placeholder="E-posta adresiniz" aria-label="E-posta adresiniz">
+            <input type="password" id="loginPassword" placeholder="Şifreniz" aria-label="Şifreniz">
+            <button id="loginBtn">Giriş Yap</button>
+            <div id="loginError"></div>
+        </div>
+    </div>
+
+    <!-- 2. Main App Container -->
+    <div id="appContainer" style="display: none;">
+        
+        <!-- 2a. Top Header Bar -->
+        <header class="app-header">
+            <div class="header-brand">
+                <img src="/logo.png" width="32" alt="Sade.C Logo">
+                <span>Sade.C</span>
+            </div>
+            <div class="header-user">
+                <span class="user-badge">Admin</span>
+                <button id="logoutBtn">Çıkış</button>
+            </div>
+        </header>
+
+        <!-- 2b. Page Containers -->
+        <main>
+            <!-- Page: Orders -->
+            <section id="page-orders" class="page-content">
+                <div class="page-header">
+                    <h2>Siparişler <span id="ordersActiveBadge">0</span></h2>
+                </div>
+                <div class="filter-chips">
+                    <button class="chip active" data-filter="active">Aktif</button>
+                    <button class="chip" data-filter="delivered">Teslim Edilenler</button>
+                    <button class="chip" data-filter="cancelled">İptal Edilenler</button>
+                </div>
+                <div id="ordersList" class="cards-list"></div>
+                <div id="ordersEmpty">Henüz sipariş yok</div>
+                <button id="manualSaleFab" class="fab-btn" aria-label="Manuel Satış Ekle">+</button>
+            </section>
+
+            <!-- Page: Tables -->
+            <section id="page-tables" class="page-content" style="display: none;">
+                <div class="page-header">
+                    <h2>Masalar</h2>
+                    <p id="tablesSummary">0 Masada Açık Hesap</p>
+                </div>
+                <div id="tablesGrid" class="tables-grid"></div>
+                <div id="tablesEmpty">Tüm masalar boş</div>
+            </section>
+
+            <!-- Page: Menu -->
+            <section id="page-menu" class="page-content" style="display: none;">
+                <div class="page-header">
+                    <h2>Menü Yönetimi</h2>
+                    <button id="addCategoryBtn">+ Kategori</button>
+                </div>
+                <div id="categoriesList" class="cards-list"></div>
+                
+                <div id="categoryDetail" style="display: none;">
+                    <div class="detail-header">
+                        <button aria-label="Geri Dön">&larr;</button>
+                        <h3 id="categoryDetailName">Kategori Adı</h3>
+                    </div>
+                    <div id="productsList" class="cards-list"></div>
+                    <button id="addProductBtn">+ Ürün Ekle</button>
+                </div>
+            </section>
+
+            <!-- Page: Dashboard -->
+            <section id="page-dashboard" class="page-content" style="display: none;">
+                <div id="dashboardPinGate">
+                    <div class="lock-icon">🔒</div>
+                    <h2>Yönetici PIN Doğrulama</h2>
+                    <input type="password" id="dashboardPinInput" inputmode="numeric" maxlength="6" aria-label="PIN Kodu">
+                    <div id="dashboardPinError"></div>
+                    <button id="dashboardPinSubmit">Giriş Yap 🚀</button>
+                </div>
+                
+                <div id="dashboardContent" style="display: none;">
+                    <div class="time-filter-chips">
+                        <button class="chip active">Bugün</button>
+                        <button class="chip">Bu Hafta</button>
+                        <button class="chip">Geçmiş</button>
+                    </div>
+                    
+                    <div id="revenueCard">
+                        <div class="card-label">Toplam Ciro</div>
+                        <div class="card-value">0 ₺</div>
+                        <div class="card-subtext">(0 Sipariş)</div>
+                    </div>
+                    
+                    <div id="paymentBreakdown">
+                        <h4>Ödeme Dağılımı</h4>
+                        <div class="breakdown-row"><span>Kredi Kartı</span> <span>0 ₺</span></div>
+                        <div class="breakdown-row"><span>Nakit</span> <span>0 ₺</span></div>
+                        <div class="breakdown-row"><span>Havale/EFT</span> <span>0 ₺</span></div>
+                        <div class="breakdown-row"><span>İkram</span> <span>0 ₺</span></div>
+                    </div>
+                    
+                    <div id="pendingCard">
+                        <div class="warning-title">⚠️ Bekleyen Tahsilat</div>
+                        <div class="warning-text">Açık masalarda toplam 0 ₺ bekleyen ödeme var.</div>
+                    </div>
+                    
+                    <div class="top-products-card">
+                        <h4>En Çok Satan Ürünler</h4>
+                        <div id="topProducts"></div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button>Z-Raporu</button>
+                        <button>Excel</button>
+                        <button>PDF</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Page: Settings -->
+            <section id="page-settings" class="page-content" style="display: none;">
+                <div class="profile-card">
+                    <h3>Restoran Profili</h3>
+                    <p><strong>Sade.C</strong></p>
+                    <p>Kahvenin en saf hali • Gerze / Sinop</p>
+                </div>
+                
+                <div class="campaign-manager">
+                    <h3>QR Menü Kampanyaları</h3>
+                    <p>Müşterilerin QR menüde göreceği aktif kampanyaları yönetin.</p>
+                    <button>+ Kampanya Ekle</button>
+                </div>
+                
+                <button class="logout-btn-large">Hesaptan Çıkış Yap</button>
+            </section>
+        </main>
+
+        <!-- 2c. Bottom Navigation Bar -->
+        <nav class="bottom-nav">
+            <div class="nav-item" data-page="orders">
+                <span class="icon">📋</span>
+                <span class="label">Siparişler</span>
+                <span id="navOrdersBadge" class="nav-badge">0</span>
+            </div>
+            <div class="nav-item" data-page="tables">
+                <span class="icon">🪑</span>
+                <span class="label">Masalar</span>
+                <span id="navTablesBadge" class="nav-badge">0</span>
+            </div>
+            <div class="nav-item" data-page="menu">
+                <span class="icon">🍽️</span>
+                <span class="label">Menü</span>
+            </div>
+            <div class="nav-item" data-page="dashboard">
+                <span class="icon">📊</span>
+                <span class="label">Kasa</span>
+            </div>
+            <div class="nav-item" data-page="settings">
+                <span class="icon">⚙️</span>
+                <span class="label">Ayarlar</span>
+            </div>
+        </nav>
+    </div>
+
+    <!-- 3. Modal Overlay -->
+    <div id="modalOverlay" class="modal-overlay">
+        <div id="modalContainer" class="modal-sheet">
+            <div class="modal-header">
+                <h3 id="modalTitle">Başlık</h3>
+                <button id="modalClose" aria-label="Kapat">✕</button>
+            </div>
+            <div id="modalBody"></div>
+            <div id="modalFooter"></div>
+        </div>
+    </div>
+
+    <!-- 4. Toast notification -->
+    <div id="toast" class="toast"></div>
+
+</body>
+</html>
