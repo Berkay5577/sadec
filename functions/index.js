@@ -151,3 +151,68 @@ exports.onNewOrderCreated = onDocumentCreated(
     }
   }
 );
+
+/**
+ * Android mobil uygulamasından Web'e test bildirimi göndermek için kullanılır.
+ */
+exports.onTestNotification = onDocumentCreated(
+  {
+    document: "restaurants/{restId}/testNotifications/{docId}",
+    region: "europe-west1"
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+    const restId = event.params.restId;
+
+    try {
+      const db = getFirestore();
+      const tokens = [];
+
+      // Sadece Web / iPhone PWA tokenlarını al
+      const webTokensSnapshot = await db
+        .collection(`restaurants/${restId}/pushTokens`)
+        .get();
+
+      webTokensSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.token && typeof data.token === "string") {
+          tokens.push(data.token);
+        }
+      });
+
+      const uniqueTokens = [...new Set(tokens)];
+      if (uniqueTokens.length === 0) {
+        console.log("No web tokens found for test notification");
+        return null;
+      }
+
+      const messaging = getMessaging();
+      const payload = {
+        tokens: uniqueTokens,
+        notification: {
+          title: "🔔 Test Bildirimi",
+          body: "Mobil uygulamadan gönderilen test bildirimi başarıyla ulaştı!"
+        },
+        webpush: {
+          headers: {
+            Urgency: "high"
+          },
+          notification: {
+            icon: "/logo.png",
+            badge: "/logo.png",
+            vibrate: [200, 100, 200, 100, 200],
+            requireInteraction: true
+          }
+        }
+      };
+
+      const response = await messaging.sendEachForMulticast(payload);
+      console.log(`Test FCM sent: ${response.successCount} success`);
+      return response;
+    } catch (err) {
+      console.error("Test notification error:", err);
+      return null;
+    }
+  }
+);

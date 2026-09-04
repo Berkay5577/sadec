@@ -13,6 +13,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.FieldValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -797,7 +800,56 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 6. GÜVENLİ ÇIKIŞ (SIGN OUT)
+            // 6. WEB/iPHONE BİLDİRİM TESTİ
+            var isSendingTest by remember { mutableStateOf(false) }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !isSendingTest) {
+                        isSendingTest = true
+                        val data = hashMapOf(
+                            "timestamp" to FieldValue.serverTimestamp(),
+                            "sender" to "Android App"
+                        )
+                        Firebase.firestore.collection("restaurants/sadec-gerze/testNotifications")
+                            .add(data)
+                            .addOnCompleteListener { isSendingTest = false }
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = WarmGold.copy(alpha = 0.1f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(1.dp, WarmGold)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Test",
+                        tint = ForestGreen
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isSendingTest) "Gönderiliyor..." else "Web'e Test Bildirimi Gönder",
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreen,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "Web panel ve iPhone PWA kullanan tüm cihazlara anında örnek bir bildirim atar.",
+                            color = SageGreen,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 7. GÜVENLİ ÇIKIŞ (SIGN OUT)
             OutlinedButton(
                 onClick = {
                     viewModel.signOut()

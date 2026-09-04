@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.sadec"
         minSdk = 24
         targetSdk = 35
-        versionCode = 18
-        versionName = "2.5"
+        versionCode = 19
+        versionName = "2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
