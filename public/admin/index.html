@@ -111,11 +111,10 @@
         <button class="chip" data-filter="cancelled">İptal Edilenler</button>
       </div>
       <div id="ordersList" class="cards-list"></div>
-      <div id="ordersEmpty" class="empty-state">
-        <div class="empty-icon">📋</div>
+      <div id="emptyOrders" class="empty-state hidden">
+        <div class="empty-icon">📝</div>
         <p>Henüz sipariş bulunmuyor</p>
       </div>
-      <button id="manualSaleFab" class="fab-btn" title="Manuel Satış">+</button>
     </div>
 
     <!-- Tables Page -->
@@ -170,8 +169,7 @@
         <div id="topProducts" class="dashboard-card"></div>
         
         <div id="dashboardActions" class="mt-16">
-          <button class="btn btn-primary btn-block" onclick="closeDailyReport()">🌙 Gün Sonu Z-Raporu & Günü Kapat</button>
-          <button class="btn btn-outline btn-block mt-8" onclick="showManualSaleDialog()">➕ Manuel Kasa Satışı</button>
+          <button class="btn btn-primary btn-block" onclick="closeDailyReport()">📉 Gün Sonu Z-Raporu & Günü Kapat</button>
         </div>
       </div>
     </div>
