@@ -279,7 +279,7 @@
       loginScreen.classList.add('hidden');
       appContainer.classList.remove('hidden');
       startListeners();
-      fixCorruptedPaidAt(); // Bozuk Timestamp → Long düzeltme (Android crash fix)
+      fixCorruptedData(); // Bozuk null ve timestamp verilerini temizler
       setupPushNotifications(); // iPhone + Desktop push bildirim kayıt
       navigateTo('orders');
     } else {
@@ -406,40 +406,50 @@
     if (unsubscribeMenuItems) unsubscribeMenuItems();
   }
 
-  // Bozuk paidAt (Firestore Timestamp) → Long (milisaniye) düzeltme
-  // Web panelden ödeme alındığında Timestamp yazılmıştı, Android Long bekliyor → crash
-  async function fixCorruptedPaidAt() {
+  // Bozuk paidAt (Firestore Timestamp -> Long) ve tableId (null -> "") düzeltme
+  async function fixCorruptedData() {
     try {
       const snapshot = await db.collection(`${BASE_PATH}/orders`).get();
       const batch = db.batch();
       let fixCount = 0;
 
-      snapshot.forEach(doc => {
+      snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (!data.items || !Array.isArray(data.items)) return;
-
         let needsFix = false;
-        const fixedItems = data.items.map(item => {
-          // paidAt bir Timestamp nesnesi ise (toDate metodu varsa) → Long'a çevir
-          if (item.paidAt && typeof item.paidAt === 'object' && item.paidAt.toDate) {
+        const updates = {};
+        
+        // Fix tableId null -> ""
+        if (data.tableId === null) {
+            updates.tableId = "";
             needsFix = true;
-            return { ...item, paidAt: item.paidAt.toDate().getTime() };
-          }
-          return item;
-        });
+        }
+
+        if (data.items && Array.isArray(data.items)) {
+            const fixedItems = data.items.map(item => {
+              if (item.paidAt && typeof item.paidAt === 'object' && item.paidAt.toDate) {
+                return { ...item, paidAt: item.paidAt.toDate().getTime() };
+              }
+              return item;
+            });
+            // If items array changed (by comparing JSON or just writing over)
+            if (JSON.stringify(fixedItems) !== JSON.stringify(data.items)) {
+                updates.items = fixedItems;
+                needsFix = true;
+            }
+        }
 
         if (needsFix) {
-          batch.update(doc.ref, { items: fixedItems });
+          batch.update(doc.ref, updates);
           fixCount++;
         }
       });
 
       if (fixCount > 0) {
         await batch.commit();
-        console.log(`✅ ${fixCount} siparişteki bozuk paidAt düzeltildi`);
+        console.log(`🔧 ${fixCount} siparişteki bozuk veri düzeltildi`);
       }
     } catch (e) {
-      console.error('paidAt fix failed:', e);
+      console.error('Data fix failed:', e);
     }
   }
 
@@ -1554,7 +1564,7 @@
       const totalAmount = itemsToSave.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
       
       const orderData = {
-          tableId: tableId === 'kasa' ? null : tableId,
+          tableId: tableId === 'kasa' ? "" : tableId,
           tableLabel: tableLabel,
           customerName: 'Manuel Satış',
           status: payment !== 'none' ? 'delivered' : 'pending',
