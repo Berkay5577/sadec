@@ -1543,7 +1543,7 @@
           if (payment !== 'none') {
               newItem.isPaid = true;
               newItem.paymentMethod = payment;
-              newItem.paidAt = firebase.firestore.Timestamp.now();
+              newItem.paidAt = Date.now(); // Android expects Long (milisaniye)
               const eff = newItem.unitPrice * newItem.quantity;
               if (payment === 'cash') newItem.cashPaid = eff;
               if (payment === 'card') newItem.cardPaid = eff;
