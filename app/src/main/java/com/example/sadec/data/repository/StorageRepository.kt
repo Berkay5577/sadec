@@ -1,61 +1,36 @@
 package com.example.sadec.data.repository
 
+import android.content.Context
 import android.net.Uri
-import com.google.firebase.storage.FirebaseStorage
-import kotlinx.coroutines.tasks.await
-import java.util.UUID
+import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
-class StorageRepository {
+class StorageRepository(private val context: Context) {
 
-    private val storage: FirebaseStorage
-        get() = FirebaseStorage.getInstance()
+    // TODO: Cloudinary'den alacağınız "Cloud Name" bilgisini buraya yazın
+    private val cloudName = "kvdllzqf"
+    private val uploadPreset = "sadec_menu"
 
-    /**
-     * Uploads category image with automatic cleanup of old image to prevent storage bloat.
-     */
     suspend fun uploadCategoryImage(
         restaurantId: String,
         categoryId: String,
         imageUri: Uri,
         oldImageUrl: String? = null
     ): Result<String> {
-        return try {
-            // 1. Delete old storage image if present
-            deleteOldImageIfStorage(oldImageUrl)
-
-            // 2. Upload new image using category ID to guarantee overwrite or clean path
-            val docKey = if (categoryId.isNotBlank()) categoryId else UUID.randomUUID().toString()
-            val fileName = "cat_${docKey}_${System.currentTimeMillis()}.jpg"
-            val imageRef = storage.reference.child("restaurants/$restaurantId/categories/$fileName")
-            
-            imageRef.putFile(imageUri).await()
-            val downloadUrl = imageRef.downloadUrl.await().toString()
-            Result.success(downloadUrl)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return uploadToCloudinary(imageUri)
     }
 
-    /**
-     * Uploads product image with automatic cleanup of old image.
-     */
     suspend fun uploadProductImage(
         restaurantId: String,
         imageUri: Uri,
         oldImageUrl: String? = null
     ): Result<String> {
-        return try {
-            // 1. Delete old storage image if present
-            deleteOldImageIfStorage(oldImageUrl)
-
-            val fileName = "prod_${UUID.randomUUID()}_${System.currentTimeMillis()}.jpg"
-            val imageRef = storage.reference.child("restaurants/$restaurantId/menu/$fileName")
-            imageRef.putFile(imageUri).await()
-            val downloadUrl = imageRef.downloadUrl.await().toString()
-            Result.success(downloadUrl)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return uploadToCloudinary(imageUri)
     }
 
     suspend fun uploadCampaignImage(
@@ -63,28 +38,55 @@ class StorageRepository {
         imageUri: Uri,
         oldImageUrl: String? = null
     ): Result<String> {
-        return try {
-            deleteOldImageIfStorage(oldImageUrl)
-
-            val fileName = "campaign_${System.currentTimeMillis()}.jpg"
-            val imageRef = storage.reference.child("restaurants/$restaurantId/campaigns/$fileName")
-            imageRef.putFile(imageUri).await()
-            val downloadUrl = imageRef.downloadUrl.await().toString()
-            Result.success(downloadUrl)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return uploadToCloudinary(imageUri)
     }
 
-    private suspend fun deleteOldImageIfStorage(oldUrl: String?) {
-        if (oldUrl.isNullOrBlank()) return
+    /**
+     * Verilen Uri'yi Base64 Data URI formatına çevirip Cloudinary REST API'sine yükler.
+     */
+    private suspend fun uploadToCloudinary(imageUri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
-            if (oldUrl.contains("firebasestorage.googleapis.com")) {
-                val oldRef = storage.getReferenceFromUrl(oldUrl)
-                oldRef.delete().await()
+            if (cloudName == "BURAYA_CLOUD_NAME_YAZIN" || uploadPreset == "BURAYA_UPLOAD_PRESET_YAZIN") {
+                return@withContext Result.failure(Exception("Lütfen StorageRepository.kt dosyasına Cloudinary bilgilerinizi ekleyin!"))
+            }
+
+            // 1. Resmi oku ve Base64'e çevir
+            val inputStream = context.contentResolver.openInputStream(imageUri)
+            val bytes = inputStream?.readBytes() ?: return@withContext Result.failure(Exception("Görsel okunamadı"))
+            inputStream.close()
+            
+            // Cloudinary "file" parametresi Base64 için "data:image/jpeg;base64,..." formatını bekler
+            val base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val dataUri = "data:image/jpeg;base64,$base64Image"
+            
+            // 2. HTTP isteğini hazırla (Unsigned Upload REST API)
+            val url = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+
+            // 3. Veriyi gönder
+            val postData = "upload_preset=$uploadPreset&file=${URLEncoder.encode(dataUri, "UTF-8")}"
+            connection.outputStream.write(postData.toByteArray(Charsets.UTF_8))
+            connection.outputStream.flush()
+            connection.outputStream.close()
+
+            // 4. Yanıtı al
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
+                val responseString = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonObject = JSONObject(responseString)
+                val secureUrl = jsonObject.getString("secure_url") // Cloudinary'nin güvenli HTTPS linki
+                Result.success(secureUrl)
+            } else {
+                val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Bilinmeyen hata"
+                Result.failure(Exception("Cloudinary Yükleme Hatası ($responseCode): $errorResponse"))
             }
         } catch (e: Exception) {
-            // Ignore deletion error (e.g. if file doesn't exist or already removed)
+            Result.failure(e)
         }
     }
 }

@@ -1,0 +1,85 @@
+{
+  "name": "projects/sadec-9b458/databases/(default)/documents/restaurants/sadec-gerze",
+  "fields": {
+    "logoUrl": {
+      "stringValue": "logo.png"
+    },
+    "popupCampaign": {
+      "mapValue": {
+        "fields": {
+          "buttonText": {
+            "stringValue": "Hemen Keşfet ✨"
+          },
+          "isActive": {
+            "booleanValue": true
+          },
+          "imageUrl": {
+            "stringValue": "https://firebasestorage.googleapis.com/v0/b/sadec-9b458.firebasestorage.app/o/restaurants%2Fsadec-gerze%2Fcampaigns%2Fcampaign_1788198167818.jpg?alt=media&token=2362d87e-d39a-485c-9a90-f0f8ff46d2a6"
+          },
+          "updatedAt": {
+            "integerValue": "1788198210253"
+          },
+          "description": {
+            "stringValue": "Enfes Lezzeti Denediniz mi"
+          },
+          "targetMenuItemId": {
+            "stringValue": "aKNZr5iFwHoOAi2Jr5A8"
+          },
+          "title": {
+            "stringValue": "Şeftalili Cheescake"
+          },
+          "active": {
+            "booleanValue": true
+          },
+          "badge": {
+            "stringValue": "DENEDİNİZ Mİ? 🌟"
+          },
+          "priceText": {
+            "stringValue": "₺250"
+          }
+        }
+      }
+    },
+    "appUpdateInfo": {
+      "mapValue": {
+        "fields": {
+          "releaseNotes": {
+            "stringValue": "iPhone ve Web PWA için manuel test bildirim gönderme butonu eklendi."
+          },
+          "latestVersionName": {
+            "stringValue": "2.6"
+          },
+          "apkUrl": {
+            "stringValue": "https://sadec.vercel.app/sadec.apk"
+          },
+          "isMandatory": {
+            "booleanValue": false
+          },
+          "publishDate": {
+            "stringValue": "04.09.2026 16:06"
+          },
+          "latestVersionCode": {
+            "integerValue": "19"
+          }
+        }
+      }
+    },
+    "address": {
+      "stringValue": "Gerze / Sinop"
+    },
+    "slug": {
+      "stringValue": "sadec-gerze"
+    },
+    "instagram": {
+      "stringValue": "@sadeckahve"
+    },
+    "name": {
+      "stringValue": "Sade.C Kahve Gerze"
+    },
+    "phone": {
+      "stringValue": "0555 123 45 67"
+    }
+  },
+  "createTime": "2026-08-26T22:27:18.757626Z",
+  "updateTime": "2026-09-04T13:06:14.496103Z"
+}

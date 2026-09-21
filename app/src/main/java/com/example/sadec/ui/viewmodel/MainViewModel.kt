@@ -22,7 +22,7 @@ class MainViewModel @JvmOverloads constructor(
     application: Application,
     private val authRepository: AuthRepository = AuthRepository(),
     private val firestoreRepository: FirestoreRepository = FirestoreRepository(),
-    private val storageRepository: StorageRepository = StorageRepository()
+    private val storageRepository: StorageRepository = StorageRepository(application)
 ) : AndroidViewModel(application) {
 
     private val _restaurantId = MutableStateFlow("sadec-gerze")
